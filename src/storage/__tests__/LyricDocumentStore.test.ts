@@ -10,8 +10,8 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 });
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createLyricDocument } from '../lyricDocuments';
-import { deleteLyricDocument, loadLyricDocuments, saveLyricDocument } from '../../storage/LyricDocumentStore';
+import { createLyricDocument } from '../../domain/lyricDocuments';
+import { deleteLyricDocument, loadLyricDocuments, saveLyricDocument } from '../LyricDocumentStore';
 
 describe('LyricDocumentStore', () => {
   beforeEach(async () => {
