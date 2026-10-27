@@ -39,7 +39,7 @@ export default function App() {
   const [history, setHistory] = useState<SessionRecord[]>([]);
   const [tab, setTab] = useState<'home' | 'library' | 'practice' | 'history' | 'settings'>('home');
   const [playerScreen, setPlayerScreen] = useState(false);
-  const lyricsScrollRef = useRef<ScrollView | null>(null);
+  const lyricsScrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);
   const lyricLineOffsets = useRef<Record<number, number>>({});
   const finishHandled = useRef(false);
 
