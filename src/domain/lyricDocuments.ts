@@ -1,4 +1,3 @@
-import { parseTimestampedLyrics } from './lrc';
 import type { LyricLine } from './lyrics';
 
 export const LYRIC_DOCUMENT_VERSION = 1 as const;
@@ -66,14 +65,22 @@ export function lyricDocumentFromLrc(
   input: CreateLyricDocumentInput,
   lrcText: string,
 ): LyricDocument {
-  const parsed = parseTimestampedLyrics(lrcText);
+  const parsed = lrcText.split(/\\r?\\n/).flatMap((rawLine) => {
+    const match = rawLine.match(/^\\s*\\[(\\d{1,2}):(\\d{2})(?:\\.(\\d{1,3}))?\\]\\s*(.+?)\\s*$/);
+    if (!match || Number(match[2]) > 59) return [];
+    const fractionMs = Number((match[3] ?? '').padEnd(3, '0') || '0');
+    return [{
+      startMs: Number(match[1]) * 60000 + Number(match[2]) * 1000 + fractionMs,
+      text: match[4],
+    }];
+  });
   return createLyricDocument({
     ...input,
     source: input.source ?? 'lrc-import',
     lines: parsed.map((line, index) => ({
       id: `${input.id}-line-${index + 1}`,
       order: index,
-      startMs: Math.round(line.time * 1000),
+      startMs: line.startMs,
       endMs: null,
       text: line.text,
     })),
@@ -83,7 +90,7 @@ export function lyricDocumentFromLrc(
 /** Serialize a document as standard minute:second.centisecond LRC lines. */
 export function lyricDocumentToLrc(document: LyricDocument): string {
   return [...document.lines]
-    .sort((a, b) => a.startMs - b.startMs || a.order - b.order)
+    .sort((a, b) => a.order - b.order)
     .map((line) => {
       const totalCentiseconds = Math.max(0, Math.floor(line.startMs / 10));
       const minutes = Math.floor(totalCentiseconds / 6000);
