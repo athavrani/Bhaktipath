@@ -37,7 +37,7 @@ export default function App() {
   const [completed, setCompleted] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [history, setHistory] = useState<SessionRecord[]>([]);
-  const [tab, setTab] = useState<'practice' | 'history'>('practice');
+  const [tab, setTab] = useState<'home' | 'library' | 'practice' | 'history' | 'settings'>('home');
   const finishHandled = useRef(false);
 
   const target = Math.max(1, Math.min(1080, Number.parseInt(targetText, 10) || 1));
@@ -160,16 +160,62 @@ export default function App() {
           </View>
         </View>
 
-        <View style={styles.tabs}>
-          <TouchableOpacity style={[styles.tab, tab === 'practice' && styles.activeTab]} onPress={() => setTab('practice')}>
-            <Text style={[styles.tabText, tab === 'practice' && styles.activeTabText]}>Practice</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.tab, tab === 'history' && styles.activeTab]} onPress={() => setTab('history')}>
-            <Text style={[styles.tabText, tab === 'history' && styles.activeTabText]}>History</Text>
-          </TouchableOpacity>
-        </View>
-
-        {tab === 'practice' ? (
+        {tab === 'home' ? (
+          <View style={styles.card}>
+            <Text style={styles.dashboardEyebrow}>YOUR DAILY PRACTICE</Text>
+            <Text style={styles.dashboardTitle}>Pause. Listen. Chant.</Text>
+            <Text style={styles.dashboardBody}>A calm space for your daily sadhana. Your recordings and session history stay on this device.</Text>
+            <View style={styles.dashboardMetric}>
+              <Text style={styles.dashboardMetricValue}>{completed}/{target}</Text>
+              <Text style={styles.helper}>Repetitions completed in the current practice</Text>
+            </View>
+            <View style={styles.dashboardMetric}>
+              <Text style={styles.dashboardMetricValue}>{history.length}</Text>
+              <Text style={styles.helper}>Completed sessions saved on this device</Text>
+            </View>
+            <TouchableOpacity style={styles.primaryLightButton} onPress={() => setTab('practice')}>
+              <Text style={styles.primaryLightButtonText}>Continue to Practice →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => setTab('history')}>
+              <Text style={styles.secondaryButtonText}>View practice history</Text>
+            </TouchableOpacity>
+          </View>
+        ) : tab === 'library' ? (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>My Library</Text>
+            <Text style={styles.helper}>Your current audio selection and lyrics are available in Practice. A persistent multi-recording library is planned for a later implementation phase.</Text>
+            {audio ? (
+              <View style={styles.audioInfo}>
+                <Text style={styles.audioIcon}>♫</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.audioName} numberOfLines={2}>{audio.name}</Text>
+                  <Text style={styles.muted}>{timestampedLyrics.length} timestamped lyric lines in the current draft</Text>
+                </View>
+              </View>
+            ) : <Text style={styles.emptyHistory}>No recording selected yet.</Text>}
+            <TouchableOpacity style={styles.primaryLightButton} onPress={() => setTab('practice')}>
+              <Text style={styles.primaryLightButtonText}>{audio ? 'Open Practice' : 'Choose a recording'} →</Text>
+            </TouchableOpacity>
+          </View>
+        ) : tab === 'settings' ? (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Settings</Text>
+            <Text style={styles.helper}>BhaktiPath is designed to work offline. Audio selection, lyrics drafts, and session history are currently kept locally; cloud transcription is not enabled.</Text>
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsLabel}>Storage</Text>
+              <Text style={styles.settingsValue}>On device</Text>
+            </View>
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsLabel}>Cloud uploads</Text>
+              <Text style={styles.settingsValue}>Disabled</Text>
+            </View>
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsLabel}>Background audio</Text>
+              <Text style={styles.settingsValue}>Configured; device testing required</Text>
+            </View>
+            <Text style={styles.helper}>Theme, language, and storage-management controls will be added in a later phase.</Text>
+          </View>
+        ) : tab === 'practice' ? (
           <>
             <View style={styles.hero}>
               <Text style={styles.eyebrow}>YOUR DAILY PRACTICE</Text>
@@ -257,14 +303,52 @@ export default function App() {
             ))}
           </View>
         )}
-        <Text style={styles.footer}>BHaktipath · Offline-first · Made for mindful practice</Text>
+        <Text style={styles.footer}>BhaktiPath · Offline-first · Made for mindful practice</Text>
       </ScrollView>
+      <View style={styles.bottomNav}>
+        {([
+          ['home', '⌂', 'Home'],
+          ['library', '♫', 'Library'],
+          ['practice', 'ॐ', 'Practice'],
+          ['history', '◷', 'History'],
+          ['settings', '⚙', 'Settings'],
+        ] as const).map(([key, glyph, label]) => (
+          <TouchableOpacity
+            key={key}
+            accessibilityRole="button"
+            accessibilityState={{ selected: tab === key }}
+            accessibilityLabel={label}
+            style={[styles.bottomNavItem, tab === key && styles.bottomNavActive]}
+            onPress={() => setTab(key)}
+          >
+            <Text style={[styles.bottomNavGlyph, tab === key && styles.bottomNavGlyphActive]}>{glyph}</Text>
+            <Text style={[styles.bottomNavLabel, tab === key && styles.bottomNavLabelActive]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFF8EC' },
+  bottomNav: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#F0E3D6', paddingTop: 7, paddingBottom: 5, paddingHorizontal: 3 },
+  bottomNavItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 5, borderRadius: 10, gap: 2 },
+  bottomNavActive: { backgroundColor: '#FFF0E0' },
+  bottomNavGlyph: { color: '#9A8375', fontSize: 19, lineHeight: 22 },
+  bottomNavGlyphActive: { color: '#A94F21' },
+  bottomNavLabel: { color: '#9A8375', fontSize: 9, fontWeight: '600' },
+  bottomNavLabelActive: { color: '#7D371A', fontWeight: '800' },
+  dashboardEyebrow: { color: '#B06B3E', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
+  dashboardTitle: { color: '#54291A', fontSize: 25, fontWeight: '800' },
+  dashboardBody: { color: '#7B5A48', lineHeight: 21, fontSize: 13 },
+  dashboardMetric: { backgroundColor: '#FFF4E4', borderRadius: 12, padding: 13, gap: 3 },
+  dashboardMetricValue: { color: '#7D371A', fontSize: 24, fontWeight: '800' },
+  primaryLightButton: { backgroundColor: '#A94F21', borderRadius: 11, padding: 14, alignItems: 'center' },
+  primaryLightButtonText: { color: '#FFFFFF', fontWeight: '800' },
+  settingsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1E5DA' },
+  settingsLabel: { color: '#54291A', fontSize: 13, fontWeight: '700', flex: 1 },
+  settingsValue: { color: '#8A6A58', fontSize: 11, flex: 1, textAlign: 'right' },
   container: { padding: 18, paddingBottom: 36, gap: 14 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
   brandMark: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#A94F21', alignItems: 'center', justifyContent: 'center' },
