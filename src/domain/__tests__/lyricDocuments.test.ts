@@ -22,17 +22,28 @@ describe('lyric document model', () => {
     expect(document.updatedAt).toBe(document.createdAt);
   });
 
-  it('imports Unicode LRC lines and exports them in timestamp order', () => {
+  it('imports Unicode LRC lines and exports them without changing editor order', () => {
     const document = lyricDocumentFromLrc({
       id: 'gujarati-aarti',
       title: 'જય અંબે',
       language: 'gu',
       audio: { name: 'aarti.mp3' },
       now: '2026-10-27T10:00:00.000Z',
-    }, '[00:05.25]જય અંબે ગૌરી\n[00:01.50]જય મંગલ મૂર્તિ');
+    }, '[00:01.50]જય મંગલ મૂર્તિ\n[00:05.25]જય અંબે ગૌરી');
     expect(document.lines.map((line) => line.text)).toEqual(['જય મંગલ મૂર્તિ', 'જય અંબે ગૌરી']);
     expect(document.lines.map((line) => line.startMs)).toEqual([1500, 5250]);
     expect(lyricDocumentToLrc(document)).toBe('[00:01.50]જય મંગલ મૂર્તિ\n[00:05.25]જય અંબે ગૌરી');
+  });
+
+  it('preserves out-of-order imported timestamps so validation can flag them', () => {
+    const document = lyricDocumentFromLrc({
+      id: 'out-of-order',
+      title: 'Test',
+      language: 'hi',
+      audio: { name: 'test.mp3' },
+    }, '[00:05.00]दूसरी पंक्ति\n[00:01.00]पहली पंक्ति');
+    expect(document.lines.map((line) => line.startMs)).toEqual([5000, 1000]);
+    expect(validateLyricDocument(document).some((issue) => issue.code === 'out-of-order')).toBe(true);
   });
 
   it('reports empty lyrics and blank titles as errors', () => {
