@@ -23,6 +23,8 @@ jobs:
         run: npx expo install expo-asset
       - name: Refresh dependency installation
         run: npm install --no-audit --no-fund
+      - name: Generate app icons
+        run: npm run generate:icons
       - name: Expo diagnostics
         run: npx expo-doctor
       - name: TypeScript check
@@ -30,7 +32,7 @@ jobs:
       - name: Unit tests
         run: npm test
 
-  android-debug-apk:
+  android-release-apk:
     if: github.event_name != 'pull_request'
     needs: checks
     runs-on: ubuntu-latest
@@ -49,15 +51,19 @@ jobs:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Generate app icons
+        run: npm run generate:icons
       - name: Generate Android native project
         run: npx expo prebuild --platform android --no-install --non-interactive
-      - name: Build debug APK
+      - name: Build standalone release APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
-      - name: Upload installable debug APK
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Verify release APK exists
+        run: test -s android/app/build/outputs/apk/release/app-release.apk
+      - name: Upload installable release APK
         uses: actions/upload-artifact@v4
         with:
-          name: BhaktiPath-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: BhaktiPath-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14

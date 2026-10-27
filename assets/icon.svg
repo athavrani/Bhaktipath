@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#17284B"/>
+      <stop offset="1" stop-color="#080F22"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#FFE7A0"/>
+      <stop offset="0.55" stop-color="#F5BE50"/>
+      <stop offset="1" stop-color="#C87B22"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+  <circle cx="512" cy="490" r="330" fill="none" stroke="#D9AC58" stroke-opacity=".24" stroke-width="8"/>
+  <circle cx="512" cy="490" r="294" fill="none" stroke="#FFE7A0" stroke-opacity=".12" stroke-width="3"/>
+  <g fill="url(#gold)" stroke="#FFF0C2" stroke-width="7" stroke-linejoin="round">
+    <path d="M512 270 C420 355 411 430 512 515 C613 430 604 355 512 270Z"/>
+    <path d="M512 515 C369 472 307 403 326 332 C414 351 476 413 512 515Z"/>
+    <path d="M512 515 C655 472 717 403 698 332 C610 351 548 413 512 515Z"/>
+    <path d="M512 526 C410 531 338 501 303 445 C390 432 459 463 512 526Z"/>
+    <path d="M512 526 C614 531 686 501 721 445 C634 432 565 463 512 526Z"/>
+  </g>
+  <path d="M343 570 Q512 651 681 570 Q654 682 512 704 Q370 682 343 570Z" fill="url(#gold)" stroke="#FFF0C2" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M512 578 C466 542 470 497 512 463 C554 497 558 542 512 578Z" fill="#FFF7D9"/>
+  <path d="M420 740 Q512 780 604 740" fill="none" stroke="#F5BE50" stroke-width="13" stroke-linecap="round"/>
+</svg>
