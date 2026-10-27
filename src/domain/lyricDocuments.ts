@@ -65,8 +65,8 @@ export function lyricDocumentFromLrc(
   input: CreateLyricDocumentInput,
   lrcText: string,
 ): LyricDocument {
-  const parsed = lrcText.split(/\\r?\\n/).flatMap((rawLine) => {
-    const match = rawLine.match(/^\\s*\\[(\\d{1,2}):(\\d{2})(?:\\.(\\d{1,3}))?\\]\\s*(.+?)\\s*$/);
+  const parsed = lrcText.split(/\r?\n/).flatMap((rawLine) => {
+    const match = rawLine.match(/^\s*\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]\s*(.+?)\s*$/);
     if (!match || Number(match[2]) > 59) return [];
     const fractionMs = Number((match[3] ?? '').padEnd(3, '0') || '0');
     return [{
