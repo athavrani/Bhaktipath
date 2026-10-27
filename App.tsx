@@ -138,6 +138,10 @@ export default function App() {
     }
     const now = new Date().toISOString();
     const existing = lyricDocuments.find((document) => document.id === currentLyricDocumentId);
+    if (existing && existing.audio.name !== audio.name) {
+      Alert.alert('Recording mismatch', `These lyrics belong to “${existing.audio.name}”. Select that recording before saving changes.`);
+      return;
+    }
     let document = lyricDocumentFromLrc({
       id: currentLyricDocumentId ?? `lyrics-${Date.now()}`,
       title: prayerName.trim(),
