@@ -14,6 +14,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { findActiveTimestampedLyric, parseTimestampedLyrics } from './src/domain/lrc';
+import {
+  hasLyricDocumentErrors,
+  lyricDocumentFromLrc,
+  lyricDocumentToLrc,
+  validateLyricDocument,
+  type LyricDocument,
+  type LyricLanguage,
+} from './src/domain/lyricDocuments';
+import { deleteLyricDocument, loadLyricDocuments, saveLyricDocument } from './src/storage/LyricDocumentStore';
 
 type AudioSelection = { uri: string; name: string; size?: number | null };
 type SessionRecord = { id: string; prayerName: string; repetitions: number; target: number; completedAt: string };
@@ -37,6 +46,10 @@ export default function App() {
   const [completed, setCompleted] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [history, setHistory] = useState<SessionRecord[]>([]);
+  const [lyricDocuments, setLyricDocuments] = useState<LyricDocument[]>([]);
+  const [lyricLanguage, setLyricLanguage] = useState<LyricLanguage>('hi');
+  const [currentLyricDocumentId, setCurrentLyricDocumentId] = useState<string | null>(null);
+  const [lyricIssues, setLyricIssues] = useState<ReturnType<typeof validateLyricDocument>>([]);
   const [tab, setTab] = useState<'home' | 'library' | 'practice' | 'history' | 'settings'>('home');
   const [playerScreen, setPlayerScreen] = useState(false);
   const lyricsScrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);
@@ -78,6 +91,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    void loadLyricDocuments().then(setLyricDocuments).catch(() =>
+      Alert.alert('Lyrics library unavailable', 'Saved lyrics could not be loaded from this device.'),
+    );
+  }, []);
+
+  useEffect(() => {
     if (!status.didJustFinish) {
       finishHandled.current = false;
       return;
@@ -111,6 +130,82 @@ export default function App() {
     player.seekTo(0);
     player.play();
   }, [status.didJustFinish, sessionStarted, completed, target, player, prayerName]);
+
+  const saveLyrics = async (markReviewed: boolean) => {
+    if (!audio) {
+      Alert.alert('Choose a recording', 'Select the recording associated with these lyrics before saving.');
+      return;
+    }
+    const now = new Date().toISOString();
+    const existing = lyricDocuments.find((document) => document.id === currentLyricDocumentId);
+    if (existing && existing.audio.name !== audio.name) {
+      Alert.alert('Recording mismatch', `These lyrics belong to “${existing.audio.name}”. Select that recording before saving changes.`);
+      return;
+    }
+    let document = lyricDocumentFromLrc({
+      id: currentLyricDocumentId ?? `lyrics-${Date.now()}`,
+      title: prayerName.trim(),
+      language: lyricLanguage,
+      audio: { name: audio.name, uri: audio.uri },
+      source: 'manual',
+      now,
+    }, lyricsText);
+    if (existing) {
+      document = { ...document, createdAt: existing.createdAt, source: existing.source };
+    }
+    const issues = validateLyricDocument(document, status.duration > 0 ? status.duration * 1000 : null);
+    setLyricIssues(issues);
+    if (markReviewed && hasLyricDocumentErrors(issues)) {
+      Alert.alert('Review needed', issues.filter((issue) => issue.severity === 'error').map((issue) => issue.message).join('\n'));
+      return;
+    }
+    if (markReviewed) {
+      document = { ...document, reviewStatus: 'reviewed', reviewedAt: now };
+    } else {
+      document = { ...document, reviewStatus: 'draft', reviewedAt: undefined };
+    }
+    try {
+      const updated = await saveLyricDocument(document);
+      setLyricDocuments(updated);
+      setCurrentLyricDocumentId(document.id);
+      Alert.alert(
+        markReviewed ? 'Lyrics reviewed and saved' : 'Draft saved',
+        issues.some((issue) => issue.severity === 'warning')
+          ? 'Saved locally. Please review the warnings shown below.'
+          : 'Saved on this device and available offline.',
+      );
+    } catch {
+      Alert.alert('Could not save lyrics', 'Local storage failed. Please try again.');
+    }
+  };
+
+  const loadSavedLyrics = (document: LyricDocument) => {
+    setCurrentLyricDocumentId(document.id);
+    setPrayerName(document.title);
+    setLyricLanguage(document.language);
+    setLyricsText(lyricDocumentToLrc(document));
+    setLyricIssues(validateLyricDocument(document));
+    setTab('practice');
+    if (!audio || audio.name !== document.audio.name) {
+      Alert.alert('Recording association', `These lyrics are associated with “${document.audio.name}”. Select that recording in Practice to synchronize playback.`);
+    }
+  };
+
+  const confirmDeleteLyrics = (document: LyricDocument) => {
+    Alert.alert('Delete saved lyrics?', `Delete “${document.title}” from this device?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          void deleteLyricDocument(document.id).then(setLyricDocuments).catch(() =>
+            Alert.alert('Delete failed', 'The saved lyrics could not be deleted.'),
+          );
+          if (currentLyricDocumentId === document.id) setCurrentLyricDocumentId(null);
+        },
+      },
+    ]);
+  };
 
   const chooseAudio = async () => {
     try {
@@ -275,19 +370,27 @@ export default function App() {
         ) : tab === 'library' ? (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>My Library</Text>
-            <Text style={styles.helper}>Your current audio selection and lyrics are available in Practice. A persistent multi-recording library is planned for a later implementation phase.</Text>
-            {audio ? (
-              <View style={styles.audioInfo}>
-                <Text style={styles.audioIcon}>♫</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.audioName} numberOfLines={2}>{audio.name}</Text>
-                  <Text style={styles.muted}>{timestampedLyrics.length} timestamped lyric lines in the current draft</Text>
+            <Text style={styles.helper}>Saved lyric documents are stored locally. Audio picker URIs may be temporary, so reselect the associated recording if playback cannot find it after restart.</Text>
+            <TouchableOpacity style={styles.primaryLightButton} onPress={() => { setCurrentLyricDocumentId(null); setLyricsText(''); setLyricIssues([]); setTab('practice'); }}>
+              <Text style={styles.primaryLightButtonText}>＋ Create lyric document</Text>
+            </TouchableOpacity>
+            {lyricDocuments.length === 0 ? (
+              <Text style={styles.emptyHistory}>No saved lyric documents yet. Create one in Practice.</Text>
+            ) : lyricDocuments.map((document) => (
+              <View key={document.id} style={styles.savedLyricCard}>
+                <Text style={styles.historyName}>{document.title || 'Untitled lyrics'}</Text>
+                <Text style={styles.muted}>{document.audio.name} · {document.lines.length} lines · {document.language.toUpperCase()}</Text>
+                <Text style={styles.muted}>{document.reviewStatus === 'reviewed' ? 'Reviewed' : 'Draft'} · Updated {new Date(document.updatedAt).toLocaleDateString()}</Text>
+                <View style={styles.controls}>
+                  <TouchableOpacity style={[styles.secondaryButton, { flex: 1 }]} onPress={() => loadSavedLyrics(document)}>
+                    <Text style={styles.secondaryButtonText}>Open / Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.deleteLyricsButton} onPress={() => confirmDeleteLyrics(document)}>
+                    <Text style={styles.deleteLyricsButtonText}>Delete</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-            ) : <Text style={styles.emptyHistory}>No recording selected yet.</Text>}
-            <TouchableOpacity style={styles.primaryLightButton} onPress={() => setTab('practice')}>
-              <Text style={styles.primaryLightButtonText}>{audio ? 'Open Practice' : 'Choose a recording'} →</Text>
-            </TouchableOpacity>
+            ))}
           </View>
         ) : tab === 'settings' ? (
           <View style={styles.card}>
@@ -350,8 +453,36 @@ export default function App() {
 
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>3. Follow the lyrics</Text>
-              <Text style={styles.helper}>Paste LRC-style timestamps for synchronized highlighting. Example: [00:12.50] your lyric line. Timestamps must match your recording.</Text>
-              <TextInput value={lyricsText} onChangeText={setLyricsText} multiline textAlignVertical="top" style={styles.lyricsInput} placeholder="[00:00.00] First line\n[00:05.00] Second line" />
+              <Text style={styles.helper}>Paste or edit LRC-style timestamps. Example: [00:12.50] your lyric line. This is the reliable offline fallback; generated lyrics are not enabled yet.</Text>
+              <Text style={styles.label}>Lyrics language</Text>
+              <View style={styles.countRow}>
+                {([
+                  ['gu', 'Gujarati'],
+                  ['hi', 'Hindi'],
+                  ['sa', 'Sanskrit'],
+                  ['en', 'English'],
+                  ['other', 'Other'],
+                ] as const).map(([value, label]) => (
+                  <TouchableOpacity key={value} style={[styles.countChip, lyricLanguage === value && styles.countChipActive]} onPress={() => setLyricLanguage(value)}>
+                    <Text style={[styles.countChipText, lyricLanguage === value && styles.countChipTextActive]}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TextInput value={lyricsText} onChangeText={(value) => { setLyricsText(value); setLyricIssues([]); }} multiline textAlignVertical="top" style={styles.lyricsInput} placeholder="[00:00.00] First line\n[00:05.00] Second line" />
+              <View style={styles.controls}>
+                <TouchableOpacity style={[styles.secondaryButton, { flex: 1 }]} onPress={() => void saveLyrics(false)}>
+                  <Text style={styles.secondaryButtonText}>Save Draft</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.primaryLightButton, { flex: 1 }]} onPress={() => void saveLyrics(true)}>
+                  <Text style={styles.primaryLightButtonText}>Review & Save</Text>
+                </TouchableOpacity>
+              </View>
+              {currentLyricDocumentId ? <Text style={styles.muted}>Editing saved document · ID: {currentLyricDocumentId}</Text> : <Text style={styles.muted}>New lyric document · not saved yet</Text>}
+              {lyricIssues.map((issue, index) => (
+                <Text key={`${issue.code}-${issue.index ?? 'doc'}-${index}`} style={issue.severity === 'error' ? styles.lyricIssueError : styles.lyricIssueWarning}>
+                  {issue.severity === 'error' ? 'Error: ' : 'Review: '}{issue.message}
+                </Text>
+              ))}
               <View style={styles.lyricPanel}>
                 <Text style={styles.lyricCaption}>NOW CHANTING</Text>
                 <Text style={styles.activeLyric}>{activeLyric || 'Your synchronized lyric will appear here'}</Text>
@@ -496,6 +627,11 @@ const styles = StyleSheet.create({
   countChipText: { color: '#855F4C', fontWeight: '700' },
   countChipTextActive: { color: '#FFFFFF' },
   lyricsInput: { minHeight: 104, maxHeight: 190, borderWidth: 1, borderColor: '#E8D7C7', borderRadius: 11, padding: 12, color: '#4D3024', backgroundColor: '#FFFCF7', fontSize: 12, lineHeight: 18 },
+  savedLyricCard: { borderWidth: 1, borderColor: '#F0E3D6', borderRadius: 12, padding: 12, gap: 6 },
+  deleteLyricsButton: { borderWidth: 1, borderColor: '#D8B4A6', borderRadius: 11, paddingHorizontal: 14, justifyContent: 'center' },
+  deleteLyricsButtonText: { color: '#A33E2D', fontWeight: '700' },
+  lyricIssueError: { color: '#B42318', fontSize: 11, lineHeight: 16 },
+  lyricIssueWarning: { color: '#8A5B12', fontSize: 11, lineHeight: 16 },
   lyricPanel: { backgroundColor: '#FFF4E4', borderRadius: 13, padding: 15, alignItems: 'center', gap: 7 },
   lyricCaption: { color: '#B06B3E', fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
   activeLyric: { color: '#71331B', fontSize: 19, fontWeight: '700', textAlign: 'center', lineHeight: 28 },
