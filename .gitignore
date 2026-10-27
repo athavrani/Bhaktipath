@@ -1,0 +1,10 @@
+node_modules/
+.expo/
+android/
+ios/
+.env
+*.jks
+*.keystore
+npm-debug.log*
+.DS_Store
+coverage/
