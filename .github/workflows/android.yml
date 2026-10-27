@@ -46,7 +46,7 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           # Avoid the obsolete SDK package "tools" from the action's defaults.
-          packages: 'platform-tools, platforms;android-36, build-tools;36.0.0'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Generate Android native project
