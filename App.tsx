@@ -162,9 +162,9 @@ export default function App() {
 
         {tab === 'home' ? (
           <View style={styles.card}>
-            <Text style={styles.eyebrow}>YOUR DAILY PRACTICE</Text>
-            <Text style={styles.heroTitle}>Pause. Listen. Chant.</Text>
-            <Text style={styles.heroBody}>A calm space for your daily sadhana. Your recordings and session history stay on this device.</Text>
+            <Text style={styles.dashboardEyebrow}>YOUR DAILY PRACTICE</Text>
+            <Text style={styles.dashboardTitle}>Pause. Listen. Chant.</Text>
+            <Text style={styles.dashboardBody}>A calm space for your daily sadhana. Your recordings and session history stay on this device.</Text>
             <View style={styles.dashboardMetric}>
               <Text style={styles.dashboardMetricValue}>{completed}/{target}</Text>
               <Text style={styles.helper}>Repetitions completed in the current practice</Text>
@@ -339,6 +339,9 @@ const styles = StyleSheet.create({
   bottomNavGlyphActive: { color: '#A94F21' },
   bottomNavLabel: { color: '#9A8375', fontSize: 9, fontWeight: '600' },
   bottomNavLabelActive: { color: '#7D371A', fontWeight: '800' },
+  dashboardEyebrow: { color: '#B06B3E', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
+  dashboardTitle: { color: '#54291A', fontSize: 25, fontWeight: '800' },
+  dashboardBody: { color: '#7B5A48', lineHeight: 21, fontSize: 13 },
   dashboardMetric: { backgroundColor: '#FFF4E4', borderRadius: 12, padding: 13, gap: 3 },
   dashboardMetricValue: { color: '#7D371A', fontSize: 24, fontWeight: '800' },
   primaryLightButton: { backgroundColor: '#A94F21', borderRadius: 11, padding: 14, alignItems: 'center' },
