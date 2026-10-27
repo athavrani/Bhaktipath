@@ -19,6 +19,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Align Expo SDK dependencies
         run: npx expo install --fix
+      - name: Install expo-audio peer dependency
+        run: npx expo install expo-asset
       - name: Refresh dependency installation
         run: npm install --no-audit --no-fund
       - name: Expo diagnostics
