@@ -38,6 +38,9 @@ export default function App() {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [history, setHistory] = useState<SessionRecord[]>([]);
   const [tab, setTab] = useState<'home' | 'library' | 'practice' | 'history' | 'settings'>('home');
+  const [playerScreen, setPlayerScreen] = useState(false);
+  const lyricsScrollRef = useRef<ScrollView | null>(null);
+  const lyricLineOffsets = useRef<Record<number, number>>({});
   const finishHandled = useRef(false);
 
   const target = Math.max(1, Math.min(1080, Number.parseInt(targetText, 10) || 1));
@@ -46,6 +49,22 @@ export default function App() {
     () => findActiveTimestampedLyric(timestampedLyrics, status.currentTime),
     [timestampedLyrics, status.currentTime],
   );
+  const activeLyricIndex = useMemo(() => {
+    let activeIndex = -1;
+    for (let index = 0; index < timestampedLyrics.length; index += 1) {
+      if (timestampedLyrics[index].time > status.currentTime) break;
+      activeIndex = index;
+    }
+    return activeIndex;
+  }, [timestampedLyrics, status.currentTime]);
+
+  useEffect(() => {
+    if (!playerScreen || activeLyricIndex < 0) return;
+    const offset = lyricLineOffsets.current[activeLyricIndex];
+    if (offset !== undefined) {
+      lyricsScrollRef.current?.scrollTo({ y: Math.max(0, offset - 72), animated: true });
+    }
+  }, [playerScreen, activeLyricIndex]);
 
   useEffect(() => {
     void setAudioModeAsync({
@@ -160,7 +179,80 @@ export default function App() {
           </View>
         </View>
 
-        {tab === 'home' ? (
+        {playerScreen ? (
+          <>
+            <TouchableOpacity style={styles.backButton} onPress={() => setPlayerScreen(false)}>
+              <Text style={styles.backButtonText}>‹  Back to Practice</Text>
+            </TouchableOpacity>
+            <View style={styles.card}>
+              <Text style={styles.playerScreenEyebrow}>CHANTING PLAYER</Text>
+              <Text style={styles.playerScreenTitle}>{prayerName.trim() || audio?.name || 'Your Sadhana'}</Text>
+              <Text style={styles.helper}>{audio ? audio.name : 'Choose a recording in Practice to begin.'}</Text>
+              <View style={styles.liveLyricStage}>
+                <Text style={styles.lyricCaption}>{status.playing ? 'NOW CHANTING' : 'CURRENT LYRIC'}</Text>
+                <Text style={styles.liveLyricText}>{activeLyric || (timestampedLyrics.length ? 'The first lyric will appear at its timestamp.' : 'Add timestamped lyrics in Practice to follow along.')}</Text>
+                <Text style={styles.liveLyricMeta}>{activeLyricIndex >= 0 ? `Line ${activeLyricIndex + 1} of ${timestampedLyrics.length}` : 'Waiting for lyric timestamp'}</Text>
+              </View>
+              <Text style={styles.sectionTitle}>Up next</Text>
+              {timestampedLyrics.slice(Math.max(0, activeLyricIndex + 1), Math.max(0, activeLyricIndex + 1) + 2).length > 0 ? (
+                timestampedLyrics.slice(Math.max(0, activeLyricIndex + 1), Math.max(0, activeLyricIndex + 1) + 2).map((line, index) => (
+                  <View key={`${line.time}-${index}`} style={styles.upcomingLyricRow}>
+                    <Text style={styles.upcomingTime}>{formatTime(line.time)}</Text>
+                    <Text style={styles.upcomingLyricText}>{line.text}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.helper}>No upcoming lyric lines are available.</Text>
+              )}
+              <Text style={styles.sectionTitle}>Full lyrics</Text>
+              {timestampedLyrics.length > 0 ? (
+                <ScrollView
+                  ref={lyricsScrollRef}
+                  style={styles.fullLyricsScroll}
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                >
+                  {timestampedLyrics.map((line, index) => (
+                    <View
+                      key={`${line.time}-${index}`}
+                      onLayout={(event) => {
+                        lyricLineOffsets.current[index] = event.nativeEvent.layout.y;
+                        if (index === activeLyricIndex) {
+                          lyricsScrollRef.current?.scrollTo({ y: Math.max(0, event.nativeEvent.layout.y - 72), animated: false });
+                        }
+                      }}
+                      style={[styles.fullLyricRow, index === activeLyricIndex && styles.fullLyricRowActive]}
+                    >
+                      <Text style={[styles.fullLyricTime, index === activeLyricIndex && styles.fullLyricTimeActive]}>{formatTime(line.time)}</Text>
+                      <Text style={[styles.fullLyricText, index === activeLyricIndex && styles.fullLyricTextActive]}>{line.text}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : (
+                <Text style={styles.helper}>No valid LRC timestamps yet. Add lyrics in Practice.</Text>
+              )}
+            </View>
+            <View style={styles.playerCard}>
+              <View style={styles.playerTopRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.playerEyebrow}>SADHANA PROGRESS</Text>
+                  <Text style={styles.playerTitle}>{completed} <Text style={styles.playerSub}>of {target} repetitions</Text></Text>
+                </View>
+                <View style={styles.omCircle}><Text style={styles.omCircleText}>ॐ</Text></View>
+              </View>
+              <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${progress * 100}%` }]} /></View>
+              <View style={styles.timeRow}><Text style={styles.timeText}>{formatTime(status.currentTime)}</Text><Text style={styles.timeText}>{formatTime(status.duration)}</Text></View>
+              <View style={styles.controls}>
+                <TouchableOpacity style={styles.playButton} onPress={startOrPause}>
+                  <Text style={styles.playButtonText}>{status.playing ? 'Ⅱ  Pause' : completed > 0 && sessionStarted ? '▶  Resume' : '▶  Start Sadhana'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.stopButton} onPress={stopSession}>
+                  <Text style={styles.stopButtonText}>Stop</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        ) : tab === 'home' ? (
           <View style={styles.card}>
             <Text style={styles.dashboardEyebrow}>YOUR DAILY PRACTICE</Text>
             <Text style={styles.dashboardTitle}>Pause. Listen. Chant.</Text>
@@ -286,6 +378,9 @@ export default function App() {
                 </TouchableOpacity>
               </View>
               <Text style={styles.helperLight}>Background playback and lock-screen controls are enabled in the native build configuration.</Text>
+              <TouchableOpacity style={styles.openPlayerButton} onPress={() => setPlayerScreen(true)}>
+                <Text style={styles.openPlayerButtonText}>Open Chanting Player with live lyrics →</Text>
+              </TouchableOpacity>
             </View>
           </>
         ) : (
@@ -305,7 +400,7 @@ export default function App() {
         )}
         <Text style={styles.footer}>BhaktiPath · Offline-first · Made for mindful practice</Text>
       </ScrollView>
-      <View style={styles.bottomNav}>
+      {!playerScreen && <View style={styles.bottomNav}>
         {([
           ['home', '⌂', 'Home'],
           ['library', '♫', 'Library'],
@@ -325,13 +420,32 @@ export default function App() {
             <Text style={[styles.bottomNavLabel, tab === key && styles.bottomNavLabelActive]}>{label}</Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </View>}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFF8EC' },
+  backButton: { alignSelf: 'flex-start', paddingVertical: 5, paddingHorizontal: 2 },
+  backButtonText: { color: '#8D411F', fontSize: 14, fontWeight: '800' },
+  playerScreenEyebrow: { color: '#B06B3E', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
+  playerScreenTitle: { color: '#54291A', fontSize: 23, fontWeight: '800' },
+  liveLyricStage: { backgroundColor: '#FFF1DE', borderRadius: 16, padding: 20, minHeight: 150, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  liveLyricText: { color: '#71331B', fontSize: 22, fontWeight: '800', textAlign: 'center', lineHeight: 32 },
+  liveLyricMeta: { color: '#A4775B', fontSize: 10, fontWeight: '600' },
+  upcomingLyricRow: { flexDirection: 'row', gap: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#F1E5DA' },
+  upcomingTime: { width: 44, color: '#A4775B', fontSize: 11, fontVariant: ['tabular-nums'] },
+  upcomingLyricText: { flex: 1, color: '#7B5A48', fontSize: 14, lineHeight: 21 },
+  fullLyricsScroll: { maxHeight: 270, borderWidth: 1, borderColor: '#F0E3D6', borderRadius: 12, padding: 6 },
+  fullLyricRow: { flexDirection: 'row', gap: 10, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 8 },
+  fullLyricRowActive: { backgroundColor: '#FCE5CC' },
+  fullLyricTime: { width: 42, color: '#A4775B', fontSize: 10, paddingTop: 2 },
+  fullLyricTimeActive: { color: '#8D411F', fontWeight: '800' },
+  fullLyricText: { flex: 1, color: '#7B5A48', fontSize: 13, lineHeight: 20 },
+  fullLyricTextActive: { color: '#71331B', fontWeight: '800' },
+  openPlayerButton: { borderWidth: 1, borderColor: '#E4A36B', borderRadius: 11, padding: 12, alignItems: 'center' },
+  openPlayerButtonText: { color: '#F5D8C3', fontWeight: '800', fontSize: 12 },
   bottomNav: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#F0E3D6', paddingTop: 7, paddingBottom: 5, paddingHorizontal: 3 },
   bottomNavItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 5, borderRadius: 10, gap: 2 },
   bottomNavActive: { backgroundColor: '#FFF0E0' },
