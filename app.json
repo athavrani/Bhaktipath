@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "BhaktiPath",
+    "slug": "bhaktipath",
+    "scheme": "bhaktipath",
+    "version": "0.2.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.bhaktipath.app",
+      "versionCode": 1,
+      "permissions": [
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true,
+          "enableBackgroundRecording": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-document-picker"
+    ],
+    "extra": {
+      "productStage": "phase-1-first-runnable-increment",
+      "offlineOnly": true
+    }
+  }
+}
