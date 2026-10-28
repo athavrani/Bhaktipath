@@ -23,6 +23,7 @@ import {
   type LyricLanguage,
 } from './src/domain/lyricDocuments';
 import { deleteLyricDocument, loadLyricDocuments, saveLyricDocument } from './src/storage/LyricDocumentStore';
+import { listVerifiedWhisperModels } from './src/services/WhisperModelCatalog';
 
 type AudioSelection = { uri: string; name: string; size?: number | null };
 type SessionRecord = { id: string; prayerName: string; repetitions: number; target: number; completedAt: string };
@@ -50,6 +51,7 @@ export default function App() {
   const [lyricLanguage, setLyricLanguage] = useState<LyricLanguage>('hi');
   const [currentLyricDocumentId, setCurrentLyricDocumentId] = useState<string | null>(null);
   const [lyricIssues, setLyricIssues] = useState<ReturnType<typeof validateLyricDocument>>([]);
+  const verifiedWhisperModels = useMemo(() => listVerifiedWhisperModels(), []);
   const [tab, setTab] = useState<'home' | 'library' | 'practice' | 'history' | 'settings'>('home');
   const [playerScreen, setPlayerScreen] = useState(false);
   const lyricsScrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);
@@ -453,6 +455,31 @@ export default function App() {
             </View>
 
             <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Generate lyrics on this device</Text>
+              <Text style={styles.helper}>Automatic transcription is designed to run locally. BhaktiPath will never upload your recording as a fallback.</Text>
+              <View style={styles.settingsRow}>
+                <Text style={styles.settingsLabel}>Whisper model</Text>
+                <Text style={styles.settingsValue}>{verifiedWhisperModels.length > 0 ? 'Verified model available' : 'Not ready'}</Text>
+              </View>
+              {verifiedWhisperModels.length === 0 ? (
+                <Text style={styles.lyricIssueWarning}>Automatic generation is currently unavailable because no model artifact has passed source, license, and SHA-256 verification. This is intentional; no unverified model will be downloaded. Continue with the offline LRC editor below.</Text>
+              ) : (
+                <Text style={styles.helper}>A verified model is listed, but transcription remains disabled until the native model installation and runtime are connected to this screen.</Text>
+              )}
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.disabledAction]}
+                disabled
+                accessibilityRole="button"
+                accessibilityState={{ disabled: true }}
+                accessibilityLabel="Generate lyrics unavailable until verified model installation is integrated"
+                onPress={() => undefined}
+              >
+                <Text style={styles.secondaryButtonText}>Generate lyrics · Not available yet</Text>
+              </TouchableOpacity>
+              <Text style={styles.muted}>Language selection and timestamp editing are available below. Generated text must be reviewed before saving.</Text>
+            </View>
+
+            <View style={styles.card}>
               <Text style={styles.sectionTitle}>3. Follow the lyrics</Text>
               <Text style={styles.helper}>Paste or edit LRC-style timestamps. Example: [00:12.50] your lyric line. This is the reliable offline fallback; generated lyrics are not enabled yet.</Text>
               <Text style={styles.label}>Lyrics language</Text>
@@ -617,6 +644,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#E8D7C7', borderRadius: 11, paddingHorizontal: 13, paddingVertical: 11, color: '#3E2B23', backgroundColor: '#FFFCF7', fontSize: 14 },
   secondaryButton: { borderWidth: 1, borderColor: '#C77A4B', borderRadius: 11, padding: 13, alignItems: 'center' },
   secondaryButtonText: { color: '#8D411F', fontWeight: '800' },
+  disabledAction: { opacity: 0.5 },
   audioInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 11, backgroundColor: '#F8F1E8', borderRadius: 12 },
   audioIcon: { fontSize: 24, color: '#A94F21' },
   audioName: { color: '#4D3024', fontWeight: '700', fontSize: 12 },
