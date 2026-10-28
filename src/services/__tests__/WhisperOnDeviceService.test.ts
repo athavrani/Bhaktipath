@@ -54,6 +54,16 @@ describe('WhisperOnDeviceService', () => {
     expect(runtime.open).not.toHaveBeenCalled();
   });
 
+  it('honors cancellation requested while the native model is initializing', async () => {
+    const { runtime, session } = makeRuntime();
+    const service = new WhisperOnDeviceService(runtime, async () => '/models/model.bin');
+    const pending = service.transcribe(request);
+    await service.cancel(request.requestId);
+    await expect(pending).rejects.toThrow('cancelled');
+    expect(session.transcribe).not.toHaveBeenCalled();
+    expect(session.release).toHaveBeenCalledTimes(1);
+  });
+
   it('releases native resources even when transcription fails', async () => {
     const { runtime, session } = makeRuntime();
     session.transcribe.mockRejectedValueOnce(new Error('native failure'));
