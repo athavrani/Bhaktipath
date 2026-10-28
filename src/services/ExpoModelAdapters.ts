@@ -1,3 +1,4 @@
+import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import type { ModelDownloadPort, ModelFilePort } from './WhisperModelManager';
 
@@ -5,13 +6,14 @@ type DownloadResumable = ReturnType<typeof FileSystem.createDownloadResumable>;
 type FileDigest = (path: string) => Promise<string>;
 
 /**
- * Expo-backed private app-storage operations. The digest implementation is injected
- * deliberately: hashing a multi-hundred-megabyte model by loading it wholly into
- * JavaScript memory is unsafe. Production wiring must supply a native, streaming
- * SHA-256 implementation before model installation is enabled.
+ * Expo-backed private app-storage operations. Expo SDK 58's File.digest performs
+ * file hashing in native code, so large model files are not copied into JS memory.
+ * The optional injection keeps this adapter straightforward to unit test.
  */
 export class ExpoModelFilePort implements ModelFilePort {
-  constructor(private readonly digestFile: FileDigest) {}
+  constructor(
+    private readonly digestFile: FileDigest = (path) => new File(path).digest('SHA-256'),
+  ) {}
 
   async exists(path: string): Promise<boolean> {
     const info = await FileSystem.getInfoAsync(path);
