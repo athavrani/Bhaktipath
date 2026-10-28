@@ -72,12 +72,21 @@ export class WhisperModelManager {
 
     onProgress?.({ phase: 'checking' });
     if (await this.files.exists(destinationPath)) {
-      const existingSize = await this.files.size(destinationPath);
-      const existingDigest = (await this.files.sha256(destinationPath)).toLowerCase();
-      if (existingSize === artifact.expectedBytes && existingDigest === artifact.sha256.toLowerCase()) {
-        onProgress?.({ phase: 'ready', fraction: 1 });
-        return { modelId: artifact.id, filePath: destinationPath, sha256: existingDigest };
+      let existingIsValid = false;
+      try {
+        const existingSize = await this.files.size(destinationPath);
+        const existingDigest = (await this.files.sha256(destinationPath)).toLowerCase();
+        existingIsValid =
+          existingSize === artifact.expectedBytes &&
+          existingDigest === artifact.sha256.toLowerCase();
+        if (existingIsValid) {
+          onProgress?.({ phase: 'ready', fraction: 1 });
+          return { modelId: artifact.id, filePath: destinationPath, sha256: existingDigest };
+        }
+      } catch {
+        // An unreadable or partially written existing file is not trusted.
       }
+      // Replace stale, corrupt, or unreadable local files with a verified download.
       await this.files.delete(destinationPath);
     }
 
