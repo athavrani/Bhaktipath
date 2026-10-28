@@ -699,6 +699,7 @@ export default function App() {
                   </TouchableOpacity>
                 ))}
               </View>
+              <Text style={styles.helper}>Automatic generation is available for Gujarati, Hindi, and English. Sanskrit remains manual until a separate accuracy benchmark is completed.</Text>
               <TextInput value={lyricsText} onChangeText={(value) => { setLyricsText(value); setLyricIssues([]); }} multiline textAlignVertical="top" style={styles.lyricsInput} placeholder="[00:00.00] First line\n[00:05.00] Second line" />
               <View style={styles.controls}>
                 <TouchableOpacity style={[styles.secondaryButton, { flex: 1 }]} onPress={() => void saveLyrics(false)}>
