@@ -2,7 +2,7 @@
 
 ## Decision status
 
-**No transcription provider is selected yet.** Phase 4 adds the provider-neutral TypeScript contract and defines the evaluation gate. It does not upload audio, download a model, or claim that any engine is accurate for devotional singing.
+**Decision updated after product approval:** the selected implementation direction is multilingual Whisper-family transcription on-device, using whisper.cpp through the React Native binding whisper.rn. The model/runtime is still subject to compatibility and devotional-audio benchmarking; no accuracy claim is made. See [Phase 5 integration plan](PHASE_5_WHISPER_ON_DEVICE_INTEGRATION.md). Phase 4 itself adds only the provider-neutral contract and does not upload audio or download a model.
 
 The initial evaluation languages are Gujarati (`gu-IN`), Hindi (`hi-IN`) and Sanskrit (`sa-IN`). English (`en-US`) may be used as a control if a recording warrants it. Provider capability declarations must be verified against the specific model, region, and API version before exposing a language in the UI.
 
@@ -20,7 +20,7 @@ Sanskrit is not assumed supported. Do not send Sanskrit recordings under another
 The official Whisper model card describes multilingual speech recognition, multiple model sizes, uneven performance across languages, and possible hallucinations. It recommends evaluating a target use case before deployment:
 https://github.com/openai/whisper/blob/main/model-card.md
 
-This is a research candidate, not a preselected Android implementation. Benchmark an Android-compatible runtime and model package separately; desktop Python compatibility is not proof of mobile compatibility. Measure download size, peak memory, cold-start time, latency, thermal impact, battery use and device compatibility.
+Approved local implementation path: evaluate whisper.cpp through whisper.rn for React Native/Android. The binding requires native integration, so validate Expo prebuild compatibility and model packaging before merging runtime code. Multilingual tiny/base models are candidates, not final selections. Benchmark download size, peak memory, cold-start time, latency, thermal impact, battery use, text accuracy and timestamp quality on the target Android device.
 
 ### Required fallback
 
