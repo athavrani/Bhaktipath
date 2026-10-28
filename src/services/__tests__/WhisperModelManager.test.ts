@@ -50,6 +50,17 @@ describe('WhisperModelManager', () => {
     expect(downloader.download).not.toHaveBeenCalled();
   });
 
+  it('replaces an existing file when its integrity check cannot be read', async () => {
+    const { manager, files, downloader } = setup({ exists: true, digest: artifact.sha256 });
+    (files.size as jest.Mock).mockRejectedValueOnce(new Error('metadata unavailable'));
+    await expect(manager.ensureInstalled(artifact, '/private/model.bin')).resolves.toMatchObject({
+      modelId: artifact.id,
+      sha256: artifact.sha256,
+    });
+    expect(files.delete).toHaveBeenCalledTimes(1);
+    expect(downloader.download).toHaveBeenCalledTimes(1);
+  });
+
   it('deletes a downloaded file when its digest is incorrect', async () => {
     const { manager, files } = setup({ downloadedDigest: 'b'.repeat(64) });
     await expect(manager.ensureInstalled(artifact, '/private/model.bin')).rejects.toBeInstanceOf(ModelIntegrityError);
