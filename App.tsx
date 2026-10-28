@@ -24,6 +24,8 @@ import {
 } from './src/domain/lyricDocuments';
 import { deleteLyricDocument, loadLyricDocuments, saveLyricDocument } from './src/storage/LyricDocumentStore';
 import { listVerifiedWhisperModels } from './src/services/WhisperModelCatalog';
+import { ExpoModelDownloadPort, ExpoModelFilePort } from './src/services/ExpoModelAdapters';
+import { WhisperModelManager, type ModelInstallProgress } from './src/services/WhisperModelManager';
 
 type AudioSelection = { uri: string; name: string; size?: number | null };
 type SessionRecord = { id: string; prayerName: string; repetitions: number; target: number; completedAt: string };
@@ -52,6 +54,18 @@ export default function App() {
   const [currentLyricDocumentId, setCurrentLyricDocumentId] = useState<string | null>(null);
   const [lyricIssues, setLyricIssues] = useState<ReturnType<typeof validateLyricDocument>>([]);
   const verifiedWhisperModels = useMemo(() => listVerifiedWhisperModels(), []);
+  const modelManager = useMemo(
+    () => new WhisperModelManager(new ExpoModelFilePort(), new ExpoModelDownloadPort()),
+    [],
+  );
+  const whisperArtifact = verifiedWhisperModels[0];
+  const whisperModelPath = whisperArtifact && FileSystem.documentDirectory
+    ? `${FileSystem.documentDirectory}models/${whisperArtifact.id}.bin`
+    : null;
+  const [modelInstallProgress, setModelInstallProgress] = useState<ModelInstallProgress | null>(null);
+  const [modelInstallBusy, setModelInstallBusy] = useState(false);
+  const [modelInstalled, setModelInstalled] = useState(false);
+  const [modelInstallError, setModelInstallError] = useState<string | null>(null);
   const [tab, setTab] = useState<'home' | 'library' | 'practice' | 'history' | 'settings'>('home');
   const [playerScreen, setPlayerScreen] = useState(false);
   const lyricsScrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);
@@ -132,6 +146,49 @@ export default function App() {
     player.seekTo(0);
     player.play();
   }, [status.didJustFinish, sessionStarted, completed, target, player, prayerName]);
+
+  const installWhisperModel = async () => {
+    if (!whisperArtifact || !whisperModelPath || modelInstallBusy) return;
+    setModelInstallBusy(true);
+    setModelInstallError(null);
+    setModelInstallProgress({ phase: 'checking' });
+    try {
+      await modelManager.ensureInstalled(whisperArtifact, whisperModelPath, setModelInstallProgress);
+      setModelInstalled(true);
+      Alert.alert('Model ready', 'The multilingual Whisper model is installed and its file size and SHA-256 were verified. Transcription runtime integration is a separate next step.');
+    } catch (error) {
+      setModelInstalled(false);
+      setModelInstallError(error instanceof Error ? error.message : 'Model installation failed. Please retry.');
+    } finally {
+      setModelInstallBusy(false);
+    }
+  };
+
+  const cancelWhisperModelDownload = async () => {
+    try {
+      await modelManager.cancelDownload();
+    } catch {
+      setModelInstallError('Cancellation could not complete cleanly. Retry or reinstall the model.');
+    }
+  };
+
+  const deleteWhisperModel = async () => {
+    if (!whisperModelPath || modelInstallBusy) return;
+    Alert.alert('Remove downloaded model?', 'This removes the on-device Whisper model. It does not delete your recordings or saved lyrics.', [
+      { text: 'Keep model', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          void modelManager.deleteInstalledModel(whisperModelPath).then(() => {
+            setModelInstalled(false);
+            setModelInstallProgress(null);
+            setModelInstallError(null);
+          }).catch(() => setModelInstallError('Could not remove the model file.')),
+        },
+      },
+    ]);
+  };
 
   const saveLyrics = async (markReviewed: boolean) => {
     if (!audio) {
@@ -459,23 +516,39 @@ export default function App() {
               <Text style={styles.helper}>Automatic transcription is designed to run locally. BhaktiPath will never upload your recording as a fallback.</Text>
               <View style={styles.settingsRow}>
                 <Text style={styles.settingsLabel}>Whisper model</Text>
-                <Text style={styles.settingsValue}>{verifiedWhisperModels.length > 0 ? 'Verified model available' : 'Not ready'}</Text>
+                <Text style={styles.settingsValue}>{!whisperArtifact ? 'Not ready' : modelInstalled ? 'Installed · verified' : 'Not installed'}</Text>
               </View>
-              {verifiedWhisperModels.length === 0 ? (
-                <Text style={styles.lyricIssueWarning}>Automatic generation is currently unavailable because no model artifact has passed source, license, and SHA-256 verification. This is intentional; no unverified model will be downloaded. Continue with the offline LRC editor below.</Text>
+              {!whisperArtifact ? (
+                <Text style={styles.lyricIssueWarning}>No model artifact is available for download because source, license, and SHA-256 verification is required. Continue with the offline LRC editor below.</Text>
               ) : (
-                <Text style={styles.helper}>A verified model is listed, but transcription remains disabled until the native model installation and runtime are connected to this screen.</Text>
+                <>
+                  <Text style={styles.helper}>{whisperArtifact.displayName} · about 74 MiB. Download only on request. Audio is not uploaded. A network connection is needed for the initial download.</Text>
+                  {modelInstallProgress?.phase === 'downloading' ? (
+                    <View style={styles.modelProgressTrack}>
+                      <View style={[styles.modelProgressFill, { width: `${Math.round((modelInstallProgress.fraction ?? 0) * 100)}%` }]} />
+                    </View>
+                  ) : null}
+                  {modelInstallProgress?.phase === 'downloading' ? (
+                    <Text style={styles.muted}>Downloading {Math.round((modelInstallProgress.fraction ?? 0) * 100)}% · {Math.round((modelInstallProgress.receivedBytes ?? 0) / 1024 / 1024)} MiB received</Text>
+                  ) : modelInstallProgress?.phase === 'verifying' ? (
+                    <Text style={styles.muted}>Verifying exact file size and SHA-256…</Text>
+                  ) : null}
+                  {modelInstallError ? <Text style={styles.lyricIssueError}>{modelInstallError}</Text> : null}
+                  {modelInstalled ? (
+                    <View style={styles.controls}>
+                      <View style={[styles.secondaryButton, { flex: 1 }]}><Text style={styles.secondaryButtonText}>Model installed and verified</Text></View>
+                      <TouchableOpacity style={styles.deleteLyricsButton} onPress={deleteWhisperModel}><Text style={styles.deleteLyricsButtonText}>Remove</Text></TouchableOpacity>
+                    </View>
+                  ) : modelInstallBusy ? (
+                    <TouchableOpacity style={styles.secondaryButton} onPress={() => void cancelWhisperModelDownload()}><Text style={styles.secondaryButtonText}>Cancel download</Text></TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={styles.primaryLightButton} onPress={() => void installWhisperModel()} disabled={!whisperModelPath}>
+                      <Text style={styles.primaryLightButtonText}>Download model · ~74 MiB</Text>
+                    </TouchableOpacity>
+                  )}
+                  <Text style={styles.muted}>Installation verifies both expected byte size and SHA-256. Incomplete or invalid downloads are deleted. Transcription remains disabled until the model is connected to the native runtime.</Text>
+                </>
               )}
-              <TouchableOpacity
-                style={[styles.secondaryButton, styles.disabledAction]}
-                disabled
-                accessibilityRole="button"
-                accessibilityState={{ disabled: true }}
-                accessibilityLabel="Generate lyrics unavailable until verified model installation is integrated"
-                onPress={() => undefined}
-              >
-                <Text style={styles.secondaryButtonText}>Generate lyrics · Not available yet</Text>
-              </TouchableOpacity>
               <Text style={styles.muted}>Language selection and timestamp editing are available below. Generated text must be reviewed before saving.</Text>
             </View>
 
@@ -656,6 +729,8 @@ const styles = StyleSheet.create({
   countChipActive: { backgroundColor: '#A94F21', borderColor: '#A94F21' },
   countChipText: { color: '#855F4C', fontWeight: '700' },
   countChipTextActive: { color: '#FFFFFF' },
+  modelProgressTrack: { height: 6, borderRadius: 5, backgroundColor: '#EAD9C9', overflow: 'hidden' },
+  modelProgressFill: { height: 6, borderRadius: 5, backgroundColor: '#A94F21' },
   lyricsInput: { minHeight: 104, maxHeight: 190, borderWidth: 1, borderColor: '#E8D7C7', borderRadius: 11, padding: 12, color: '#4D3024', backgroundColor: '#FFFCF7', fontSize: 12, lineHeight: 18 },
   savedLyricCard: { borderWidth: 1, borderColor: '#F0E3D6', borderRadius: 12, padding: 12, gap: 6 },
   deleteLyricsButton: { borderWidth: 1, borderColor: '#D8B4A6', borderRadius: 11, paddingHorizontal: 14, justifyContent: 'center' },
