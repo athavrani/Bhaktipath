@@ -39,6 +39,30 @@ type SessionRecord = { id: string; prayerName: string; repetitions: number; targ
 const HISTORY_KEY = '@bhaktipath/session-history-v1';
 const DEFAULT_LYRICS = '[00:00.00] Paste timestamped lyrics here\n[00:05.00] Example: each line starts with [mm:ss.xx]';
 
+function describeTranscriptionError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === 'string' && error.trim()) return error.trim();
+
+  if (error && typeof error === 'object') {
+    const value = error as Record<string, unknown>;
+    const message = [value.message, value.localizedDescription, value.description]
+      .find((item) => typeof item === 'string' && item.trim()) as string | undefined;
+    const code = [value.code, value.errorCode, value.nativeErrorCode]
+      .find((item) => typeof item === 'string' || typeof item === 'number');
+    if (message && code !== undefined) return `${message} (code: ${String(code)})`;
+    if (message) return message;
+    if (code !== undefined) return `Native transcription error (code: ${String(code)}).`;
+    try {
+      const serialized = JSON.stringify(error);
+      if (serialized && serialized !== '{}') return serialized.slice(0, 500);
+    } catch {
+      // Fall through to the safe generic message below.
+    }
+  }
+
+  return 'The native transcription engine failed without providing an error message. Try a short WAV or MP3 recording. If it repeats, share the diagnostic details with support.';
+}
+
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
   const total = Math.floor(seconds);
@@ -288,7 +312,7 @@ export default function App() {
       if (error instanceof TranscriptionCancelledError) {
         setTranscriptionNotice('Transcription cancelled. No draft was saved.');
       } else {
-        setTranscriptionNotice(error instanceof Error ? error.message : 'On-device transcription failed.');
+        setTranscriptionNotice(describeTranscriptionError(error));
       }
     } finally {
       setTranscriptionBusy(false);
