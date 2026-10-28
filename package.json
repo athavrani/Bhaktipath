@@ -22,7 +22,8 @@
     "react": "19.3.0",
     "react-native": "0.88.0",
     "sharp": "^0.34.5",
-    "whisper.rn": "0.7.4"
+    "whisper.rn": "0.7.4",
+    "react-native-safe-area-context": "~5.9.1"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

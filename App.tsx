@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { findActiveTimestampedLyric, parseTimestampedLyrics } from './src/domain/lrc';
 import {
   hasLyricDocumentErrors,
@@ -263,7 +263,8 @@ export default function App() {
   const progress = target > 0 ? Math.min(1, completed / target) : 0;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.brandRow}>
@@ -552,7 +553,8 @@ export default function App() {
           </TouchableOpacity>
         ))}
       </View>}
-    </SafeAreaView>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
