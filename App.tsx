@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { findActiveTimestampedLyric, parseTimestampedLyrics } from './src/domain/lrc';
@@ -105,6 +106,31 @@ export default function App() {
       if (raw) setHistory(JSON.parse(raw) as SessionRecord[]);
     }).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const checkInstalledModel = async () => {
+      if (!whisperArtifact || !whisperModelPath) return;
+      try {
+        const files = new ExpoModelFilePort();
+        if (!(await files.exists(whisperModelPath))) return;
+        const [size, digest] = await Promise.all([
+          files.size(whisperModelPath),
+          files.sha256(whisperModelPath),
+        ]);
+        if (active && size === whisperArtifact.expectedBytes && digest === whisperArtifact.sha256.toLowerCase()) {
+          setModelInstalled(true);
+          setModelInstallProgress({ phase: 'ready', fraction: 1 });
+        } else if (active) {
+          await files.delete(whisperModelPath);
+        }
+      } catch {
+        if (active) setModelInstallError('Could not verify the local model. Retry installation to repair it.');
+      }
+    };
+    void checkInstalledModel();
+    return () => { active = false; };
+  }, [whisperArtifact, whisperModelPath]);
 
   useEffect(() => {
     void loadLyricDocuments().then(setLyricDocuments).catch(() =>
