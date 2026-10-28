@@ -11,6 +11,7 @@ export interface WhisperModelArtifact {
 
 export interface ModelFilePort {
   exists(path: string): Promise<boolean>;
+  size(path: string): Promise<number>;
   delete(path: string): Promise<void>;
   sha256(path: string): Promise<string>;
 }
@@ -38,16 +39,13 @@ export type ModelInstallResult = {
 };
 
 export class ModelIntegrityError extends Error {
-  constructor(message = 'Downloaded model failed SHA-256 verification.') {
+  constructor(message = 'Downloaded model failed integrity verification (size or SHA-256 mismatch).') {
     super(message);
     this.name = 'ModelIntegrityError';
   }
 }
 
-/**
- * Installs only explicitly requested artifacts. It never starts a download at app startup.
- * Caller must provide a private app-storage destination and a trusted manifest entry.
- */
+/** Installs only explicitly requested artifacts; never downloads at app startup. */
 export class WhisperModelManager {
   constructor(
     private readonly files: ModelFilePort,
@@ -62,6 +60,9 @@ export class WhisperModelManager {
     if (!artifact.id.trim() || !artifact.downloadUrl.trim() || !destinationPath.trim()) {
       throw new Error('Model ID, download URL, and destination path are required.');
     }
+    if (!/^https:\/\//i.test(artifact.downloadUrl)) {
+      throw new Error('Whisper model downloads must use HTTPS.');
+    }
     if (!/^[a-f0-9]{64}$/i.test(artifact.sha256)) {
       throw new Error('A valid SHA-256 digest is required before downloading a model.');
     }
@@ -71,8 +72,9 @@ export class WhisperModelManager {
 
     onProgress?.({ phase: 'checking' });
     if (await this.files.exists(destinationPath)) {
+      const existingSize = await this.files.size(destinationPath);
       const existingDigest = (await this.files.sha256(destinationPath)).toLowerCase();
-      if (existingDigest === artifact.sha256.toLowerCase()) {
+      if (existingSize === artifact.expectedBytes && existingDigest === artifact.sha256.toLowerCase()) {
         onProgress?.({ phase: 'ready', fraction: 1 });
         return { modelId: artifact.id, filePath: destinationPath, sha256: existingDigest };
       }
@@ -90,15 +92,15 @@ export class WhisperModelManager {
         });
       });
       onProgress?.({ phase: 'verifying' });
+      const actualSize = await this.files.size(destinationPath);
       const digest = (await this.files.sha256(destinationPath)).toLowerCase();
-      if (digest !== artifact.sha256.toLowerCase()) {
+      if (actualSize !== artifact.expectedBytes || digest !== artifact.sha256.toLowerCase()) {
         await this.files.delete(destinationPath);
         throw new ModelIntegrityError();
       }
       onProgress?.({ phase: 'ready', fraction: 1 });
       return { modelId: artifact.id, filePath: destinationPath, sha256: digest };
     } catch (error) {
-      // Remove incomplete or invalid downloads; preserve the original error for the UI.
       if (await this.files.exists(destinationPath)) await this.files.delete(destinationPath);
       throw error;
     }
