@@ -575,7 +575,7 @@ export default function App() {
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>My Library</Text>
             <Text style={styles.helper}>Saved lyric documents are stored locally. Audio picker URIs may be temporary, so reselect the associated recording if playback cannot find it after restart.</Text>
-            <TouchableOpacity style={styles.primaryLightButton} onPress={() => { setCurrentLyricDocumentId(null); setLyricsText(''); setLyricIssues([]); setTab('practice'); }}>
+            <TouchableOpacity style={styles.primaryLightButton} onPress={() => { setCurrentLyricDocumentId(null); setLyricsText(''); setLyricsSource('manual'); setLyricIssues([]); setTab('practice'); }}>
               <Text style={styles.primaryLightButtonText}>＋ Create lyric document</Text>
             </TouchableOpacity>
             {lyricDocuments.length === 0 ? (
