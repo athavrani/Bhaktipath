@@ -25,7 +25,8 @@ import {
 } from './src/domain/lyricDocuments';
 import { deleteLyricDocument, loadLyricDocuments, saveLyricDocument } from './src/storage/LyricDocumentStore';
 import { listVerifiedWhisperModels } from './src/services/WhisperModelCatalog';
-import { WhisperOnDeviceService, TranscriptionCancelledError, type TranscriptionProgress, type TranscriptionLanguage } from './src/services/WhisperOnDeviceService';
+import { WhisperOnDeviceService, TranscriptionCancelledError } from './src/services/WhisperOnDeviceService';
+import type { TranscriptionProgress, TranscriptionLanguage } from './src/services/LyricsGenerationService';
 import { WhisperRnRuntime } from './src/services/WhisperRnRuntime';
 import type { LyricSource } from './src/domain/lyricDocuments';
 import { transcriptionDraftToLrc } from './src/domain/transcriptionLrc';
