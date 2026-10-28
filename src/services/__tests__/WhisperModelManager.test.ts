@@ -20,6 +20,7 @@ describe('WhisperModelManager', () => {
     let digest = options?.digest ?? '';
     const files: ModelFilePort = {
       exists: jest.fn(async () => exists),
+      size: jest.fn(async () => artifact.expectedBytes),
       sha256: jest.fn(async () => digest),
       delete: jest.fn(async () => { exists = false; }),
     };
@@ -53,6 +54,19 @@ describe('WhisperModelManager', () => {
     const { manager, files } = setup({ downloadedDigest: 'b'.repeat(64) });
     await expect(manager.ensureInstalled(artifact, '/private/model.bin')).rejects.toBeInstanceOf(ModelIntegrityError);
     expect(files.delete).toHaveBeenCalled();
+  });
+
+  it('deletes a downloaded file when its byte size is incorrect', async () => {
+    const { manager, files } = setup();
+    (files.size as jest.Mock).mockResolvedValueOnce(999);
+    await expect(manager.ensureInstalled(artifact, '/private/model.bin')).rejects.toBeInstanceOf(ModelIntegrityError);
+    expect(files.delete).toHaveBeenCalled();
+  });
+
+  it('rejects a non-HTTPS model URL before downloading', async () => {
+    const { manager, downloader } = setup();
+    await expect(manager.ensureInstalled({ ...artifact, downloadUrl: 'http://example.com/model.bin' }, '/private/model.bin')).rejects.toThrow('HTTPS');
+    expect(downloader.download).not.toHaveBeenCalled();
   });
 
   it('rejects an artifact without a valid checksum before downloading', async () => {
