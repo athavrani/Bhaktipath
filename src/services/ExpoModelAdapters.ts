@@ -20,6 +20,14 @@ export class ExpoModelFilePort implements ModelFilePort {
     return info.exists && !info.isDirectory;
   }
 
+  async size(path: string): Promise<number> {
+    const info = await FileSystem.getInfoAsync(path);
+    if (!info.exists || info.isDirectory || typeof info.size !== 'number') {
+      throw new Error('Cannot determine the downloaded model file size.');
+    }
+    return info.size;
+  }
+
   async delete(path: string): Promise<void> {
     await FileSystem.deleteAsync(path, { idempotent: true });
   }
