@@ -66,6 +66,7 @@ export class WhisperOnDeviceService implements LyricsGenerationService {
   };
 
   private readonly active = new Map<string, WhisperRuntimeSession>();
+  private readonly cancelled = new Set<string>();
 
   constructor(
     private readonly runtime: WhisperRuntimePort,
@@ -93,6 +94,11 @@ export class WhisperOnDeviceService implements LyricsGenerationService {
 
     onProgress?.({ requestId: request.requestId, phase: 'preparing', message: 'Loading local model.' });
     const session = await this.runtime.open(modelPath);
+    if (this.cancelled.has(request.requestId)) {
+      this.cancelled.delete(request.requestId);
+      await session.release();
+      throw new TranscriptionCancelledError();
+    }
     this.active.set(request.requestId, session);
     try {
       onProgress?.({ requestId: request.requestId, phase: 'transcribing', message: 'Processing audio locally.' });
@@ -139,11 +145,13 @@ export class WhisperOnDeviceService implements LyricsGenerationService {
       };
     } finally {
       this.active.delete(request.requestId);
+      this.cancelled.delete(request.requestId);
       await session.release();
     }
   }
 
   async cancel(requestId: string): Promise<void> {
+    this.cancelled.add(requestId);
     const session = this.active.get(requestId);
     if (session) await session.stop();
   }
