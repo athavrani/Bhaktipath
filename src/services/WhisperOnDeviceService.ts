@@ -77,11 +77,13 @@ export class WhisperOnDeviceService implements LyricsGenerationService {
     request: TranscriptionRequest,
     onProgress?: (progress: TranscriptionProgress) => void,
   ): Promise<TranscriptionDraft> {
-    const issues = validateTranscriptionRequest(request);
-    if (issues.length) throw new Error(issues.map((issue) => issue.message).join(' '));
+    // Reject cloud mode before generic request validation so this local-only service
+    // never implies that adding cloud consent could make it upload audio.
     if (request.mode !== 'on-device') {
       throw new Error('WhisperOnDeviceService only accepts on-device requests.');
     }
+    const issues = validateTranscriptionRequest(request);
+    if (issues.length) throw new Error(issues.map((issue) => issue.message).join(' '));
     if (this.active.has(request.requestId)) {
       throw new Error('A transcription with this request ID is already running.');
     }
