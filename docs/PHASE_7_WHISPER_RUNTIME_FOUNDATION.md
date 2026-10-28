@@ -5,7 +5,8 @@ This phase introduces testable, platform-neutral contracts for on-device transcr
 
 ## Runtime adapter
 - `WhisperOnDeviceService` implements the existing `LyricsGenerationService` contract through an injected `WhisperRuntimePort`.
-- The runtime port must only be connected to the pinned `whisper.rn` package after Phase 6's Android release APK build succeeds.
+- Phase 6 is merged: the pinned `whisper.rn` dependency passed CI and an Android release APK was packaged successfully. This confirms native build compatibility, not runtime transcription correctness.
+- The runtime port must be connected to the actual `whisper.rn` API only after its result shape, cancellation, resource-release behavior, and audio input requirements are validated.
 - Model paths are obtained from a verifier-backed provider; the adapter will not initialize a model without a path.
 - Cloud requests are rejected. There is no upload or cloud fallback.
 - Output is a draft, never auto-saved. Warnings call out singing/mantra/Sanskrit accuracy limits and require user review.
@@ -20,12 +21,14 @@ This phase introduces testable, platform-neutral contracts for on-device transcr
 - UI should expose progress, cancellation, retry, storage use, and deletion. Platform adapter and lifecycle integration are still required.
 
 ## Remaining work
-1. Complete Phase 6 Android native build validation and merge its dependency spike only after successful packaging.
-2. Implement Expo-compatible filesystem/download/hash ports and choose a verified multilingual model artifact.
-3. Connect the runtime port to the actual `whisper.rn` API, including native result shape, cancellation, and release semantics.
-4. Add Generate Lyrics UI, user-selected language, model install/delete flow, progress and cancellation.
-5. Convert runtime segments to the existing lyric line model; require review before saving.
-6. Test on physical Android devices with Gujarati and Hindi devotional recordings. Sanskrit remains unvalidated until benchmarked.
+1. Implement Expo-compatible filesystem/download/hash ports and select a verified multilingual model artifact.
+2. Connect the runtime port to the actual `whisper.rn` API, including native result shape, cancellation, and release semantics.
+3. Add Generate Lyrics UI, user-selected language, model install/delete flow, progress and cancellation.
+4. Convert runtime segments to the existing lyric line model; require review before saving.
+5. Test on physical Android devices with Gujarati and Hindi devotional recordings. Sanskrit remains unvalidated until benchmarked.
 
 ## Audio input caveat
 The runtime adapter accepts a local audio URI, but this does not guarantee every format from the app's audio picker is accepted by Whisper. Validate the package's exact file decoding behavior; implement a local conversion path for unsupported formats rather than silently uploading or failing without explanation.
+
+## Validation status
+The CI and Android release packaging gate for Phase 6 passed. Phase 7 itself must pass its own CI and Android packaging checks before merge. A successful APK build does not substitute for on-device transcription and audio-lifecycle testing.
