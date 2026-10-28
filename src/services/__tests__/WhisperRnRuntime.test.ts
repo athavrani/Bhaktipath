@@ -1,6 +1,6 @@
 jest.mock('whisper.rn', () => ({
   initWhisper: jest.fn(),
-}));
+}), { virtual: true });
 
 import { initWhisper } from 'whisper.rn';
 import {
