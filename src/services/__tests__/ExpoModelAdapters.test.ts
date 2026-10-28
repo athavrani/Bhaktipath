@@ -1,3 +1,9 @@
+jest.mock('expo-file-system', () => ({
+  File: jest.fn().mockImplementation(() => ({
+    digest: jest.fn().mockResolvedValue('B'.repeat(64)),
+  })),
+}), { virtual: true });
+
 jest.mock('expo-file-system/legacy', () => ({
   getInfoAsync: jest.fn(),
   deleteAsync: jest.fn(),
@@ -5,13 +11,21 @@ jest.mock('expo-file-system/legacy', () => ({
   createDownloadResumable: jest.fn(),
 }), { virtual: true });
 
+import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import { ExpoModelDownloadPort, ExpoModelFilePort } from '../ExpoModelAdapters';
 
 const fs = FileSystem as jest.Mocked<typeof FileSystem>;
 
 describe('ExpoModelFilePort', () => {
-  it('checks file existence and validates the native streaming digest', async () => {
+  it('uses Expo native File.digest for SHA-256 by default', async () => {
+    const files = new ExpoModelFilePort();
+    expect(await files.sha256('file:///models/tiny.bin')).toBe('b'.repeat(64));
+    expect(File).toHaveBeenCalledWith('file:///models/tiny.bin');
+    expect(((File as unknown) as jest.Mock).mock.results[0].value.digest).toHaveBeenCalledWith('SHA-256');
+  });
+
+  it('checks file existence and normalizes an injected digest', async () => {
     (fs.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true, isDirectory: false });
     const files = new ExpoModelFilePort(async () => 'A'.repeat(64));
     expect(await files.exists('/models/tiny.bin')).toBe(true);
