@@ -25,6 +25,10 @@ import {
 } from './src/domain/lyricDocuments';
 import { deleteLyricDocument, loadLyricDocuments, saveLyricDocument } from './src/storage/LyricDocumentStore';
 import { listVerifiedWhisperModels } from './src/services/WhisperModelCatalog';
+import { WhisperOnDeviceService, TranscriptionCancelledError, type TranscriptionProgress, type TranscriptionLanguage } from './src/services/WhisperOnDeviceService';
+import { WhisperRnRuntime } from './src/services/WhisperRnRuntime';
+import type { LyricSource } from './src/domain/lyricDocuments';
+import { transcriptionDraftToLrc } from './src/domain/transcriptionLrc';
 import { ExpoModelDownloadPort, ExpoModelFilePort } from './src/services/ExpoModelAdapters';
 import { WhisperModelManager, type ModelInstallProgress } from './src/services/WhisperModelManager';
 
@@ -60,6 +64,24 @@ export default function App() {
     [],
   );
   const whisperArtifact = verifiedWhisperModels[0];
+  const transcriptionService = useMemo(() => new WhisperOnDeviceService(
+    new WhisperRnRuntime(),
+    async () => {
+      if (!whisperArtifact || !whisperModelPath) return null;
+      const files = new ExpoModelFilePort();
+      try {
+        if (!(await files.exists(whisperModelPath))) return null;
+        const [size, digest] = await Promise.all([files.size(whisperModelPath), files.sha256(whisperModelPath)]);
+        if (size !== whisperArtifact.expectedBytes || digest !== whisperArtifact.sha256.toLowerCase()) {
+          await files.delete(whisperModelPath);
+          return null;
+        }
+        return whisperModelPath;
+      } catch {
+        return null;
+      }
+    },
+  ), [whisperArtifact, whisperModelPath]);
   const whisperModelPath = whisperArtifact && FileSystem.documentDirectory
     ? `${FileSystem.documentDirectory}models/${whisperArtifact.id}.bin`
     : null;
@@ -67,6 +89,11 @@ export default function App() {
   const [modelInstallBusy, setModelInstallBusy] = useState(false);
   const [modelInstalled, setModelInstalled] = useState(false);
   const [modelInstallError, setModelInstallError] = useState<string | null>(null);
+  const [transcriptionBusy, setTranscriptionBusy] = useState(false);
+  const [transcriptionRequestId, setTranscriptionRequestId] = useState<string | null>(null);
+  const [transcriptionProgress, setTranscriptionProgress] = useState<TranscriptionProgress | null>(null);
+  const [transcriptionNotice, setTranscriptionNotice] = useState<string | null>(null);
+  const [lyricsSource, setLyricsSource] = useState<LyricSource>('manual');
   const [tab, setTab] = useState<'home' | 'library' | 'practice' | 'history' | 'settings'>('home');
   const [playerScreen, setPlayerScreen] = useState(false);
   const lyricsScrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);
@@ -216,6 +243,68 @@ export default function App() {
     ]);
   };
 
+  const generateLyricsOnDevice = async () => {
+    if (!audio) {
+      Alert.alert('Choose a recording', 'Select a local audio recording before generating lyrics.');
+      return;
+    }
+    if (!modelInstalled || !whisperArtifact || !whisperModelPath) {
+      Alert.alert('Model required', 'Download and verify the Whisper model before generating lyrics.');
+      return;
+    }
+    if (lyricLanguage === 'sa') {
+      Alert.alert('Sanskrit not yet validated', 'Automatic Sanskrit transcription is disabled until a separate accuracy benchmark is completed. You can still paste or edit Sanskrit LRC lyrics below.');
+      return;
+    }
+    if (lyricLanguage === 'other') {
+      Alert.alert('Choose a supported language', 'Automatic transcription currently supports Gujarati, Hindi, and English.');
+      return;
+    }
+    const languageMap: Record<Exclude<LyricLanguage, 'sa' | 'other'>, TranscriptionLanguage> = {
+      gu: 'gu-IN', hi: 'hi-IN', en: 'en-US',
+    };
+    const requestId = `transcription-${Date.now()}`;
+    setTranscriptionRequestId(requestId);
+    setTranscriptionBusy(true);
+    setTranscriptionProgress({ requestId, phase: 'preparing', message: 'Preparing on-device model.' });
+    setTranscriptionNotice(null);
+    try {
+      const draft = await transcriptionService.transcribe({
+        requestId,
+        audioUri: audio.uri,
+        language: languageMap[lyricLanguage],
+        mode: 'on-device',
+      }, setTranscriptionProgress);
+      const lrc = transcriptionDraftToLrc(draft);
+      if (!lrc.trim()) throw new Error('The transcription returned no usable timed segments. Try another recording or use the manual LRC editor.');
+      setLyricsText(lrc);
+      setCurrentLyricDocumentId(null);
+      setLyricsSource('generated-local');
+      setLyricIssues([]);
+      setTranscriptionNotice(draft.warnings.join(' '));
+      Alert.alert('Draft generated', 'The on-device transcript is now in the editor. Review and correct all words and timestamps before saving. Nothing has been saved yet.');
+    } catch (error) {
+      if (error instanceof TranscriptionCancelledError) {
+        setTranscriptionNotice('Transcription cancelled. No draft was saved.');
+      } else {
+        setTranscriptionNotice(error instanceof Error ? error.message : 'On-device transcription failed.');
+      }
+    } finally {
+      setTranscriptionBusy(false);
+      setTranscriptionRequestId(null);
+      setTranscriptionProgress(null);
+    }
+  };
+
+  const cancelLyricsTranscription = async () => {
+    if (!transcriptionRequestId) return;
+    try {
+      await transcriptionService.cancel(transcriptionRequestId);
+    } catch {
+      setTranscriptionNotice('Cancellation was requested, but the native runtime did not stop cleanly.');
+    }
+  };
+
   const saveLyrics = async (markReviewed: boolean) => {
     if (!audio) {
       Alert.alert('Choose a recording', 'Select the recording associated with these lyrics before saving.');
@@ -232,7 +321,7 @@ export default function App() {
       title: prayerName.trim(),
       language: lyricLanguage,
       audio: { name: audio.name, uri: audio.uri },
-      source: 'manual',
+      source: lyricsSource,
       now,
     }, lyricsText);
     if (existing) {
@@ -266,6 +355,7 @@ export default function App() {
 
   const loadSavedLyrics = (document: LyricDocument) => {
     setCurrentLyricDocumentId(document.id);
+    setLyricsSource(document.source);
     setPrayerName(document.title);
     setLyricLanguage(document.language);
     setLyricsText(lyricDocumentToLrc(document));
@@ -539,7 +629,7 @@ export default function App() {
 
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Generate lyrics on this device</Text>
-              <Text style={styles.helper}>Automatic transcription is designed to run locally. BhaktiPath will never upload your recording as a fallback.</Text>
+              <Text style={styles.helper}>Automatic transcription runs on this device only. BhaktiPath never uploads your recording or silently falls back to cloud processing.</Text>
               <View style={styles.settingsRow}>
                 <Text style={styles.settingsLabel}>Whisper model</Text>
                 <Text style={styles.settingsValue}>{!whisperArtifact ? 'Not ready' : modelInstalled ? 'Installed · verified' : 'Not installed'}</Text>
@@ -572,7 +662,21 @@ export default function App() {
                       <Text style={styles.primaryLightButtonText}>Download model · ~74 MiB</Text>
                     </TouchableOpacity>
                   )}
-                  <Text style={styles.muted}>Installation verifies both expected byte size and SHA-256. Incomplete or invalid downloads are deleted. Transcription remains disabled until the model is connected to the native runtime.</Text>
+                  <Text style={styles.muted}>Installation verifies expected byte size and SHA-256. Incomplete or invalid downloads are deleted.</Text>
+                  {modelInstalled ? (
+                    <>
+                      <TouchableOpacity style={[styles.primaryLightButton, (!audio || transcriptionBusy) && styles.disabledAction]} onPress={() => void generateLyricsOnDevice()} disabled={!audio || transcriptionBusy}>
+                        <Text style={styles.primaryLightButtonText}>{transcriptionBusy ? 'Transcribing on this device…' : 'Generate draft on this device'}</Text>
+                      </TouchableOpacity>
+                      {transcriptionBusy ? (
+                        <>
+                          <Text style={styles.muted}>{transcriptionProgress?.message ?? (transcriptionProgress?.phase === 'transcribing' ? 'Transcribing locally…' : 'Preparing local transcription…')}{transcriptionProgress?.fraction != null ? ` ${Math.round(transcriptionProgress.fraction * 100)}%` : ''}</Text>
+                          <TouchableOpacity style={styles.secondaryButton} onPress={() => void cancelLyricsTranscription()}><Text style={styles.secondaryButtonText}>Cancel transcription</Text></TouchableOpacity>
+                        </>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {transcriptionNotice ? <Text style={styles.lyricIssueWarning}>{transcriptionNotice}</Text> : null}
                 </>
               )}
               <Text style={styles.muted}>Language selection and timestamp editing are available below. Generated text must be reviewed before saving.</Text>
@@ -580,7 +684,7 @@ export default function App() {
 
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>3. Follow the lyrics</Text>
-              <Text style={styles.helper}>Paste or edit LRC-style timestamps. Example: [00:12.50] your lyric line. This is the reliable offline fallback; generated lyrics are not enabled yet.</Text>
+              <Text style={styles.helper}>Paste or edit LRC-style timestamps. Example: [00:12.50] your lyric line. Generated lyrics appear here as an editable draft and are never saved automatically.</Text>
               <Text style={styles.label}>Lyrics language</Text>
               <View style={styles.countRow}>
                 {([
