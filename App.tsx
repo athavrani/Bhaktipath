@@ -210,7 +210,7 @@ export default function App() {
             setModelInstalled(false);
             setModelInstallProgress(null);
             setModelInstallError(null);
-          }).catch(() => setModelInstallError('Could not remove the model file.')),
+          }).catch(() => setModelInstallError('Could not remove the model file.'));
         },
       },
     ]);
