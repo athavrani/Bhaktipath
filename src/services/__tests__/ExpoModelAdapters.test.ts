@@ -22,7 +22,7 @@ describe('ExpoModelFilePort', () => {
     const files = new ExpoModelFilePort();
     expect(await files.sha256('file:///models/tiny.bin')).toBe('b'.repeat(64));
     expect(File).toHaveBeenCalledWith('file:///models/tiny.bin');
-    expect((File as jest.Mock).mock.results[0].value.digest).toHaveBeenCalledWith('SHA-256');
+    expect(((File as unknown) as jest.Mock).mock.results[0].value.digest).toHaveBeenCalledWith('SHA-256');
   });
 
   it('checks file existence and normalizes an injected digest', async () => {
