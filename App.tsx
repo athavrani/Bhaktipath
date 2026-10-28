@@ -403,6 +403,34 @@ export default function App() {
     }
   };
 
+  const importLrcFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['text/plain', 'application/octet-stream'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const selected = result.assets[0];
+      if (!selected.name.toLowerCase().endsWith('.lrc')) {
+        Alert.alert('Choose an LRC file', 'Select a file with the .lrc extension. You can also paste timestamped lyrics into the editor.');
+        return;
+      }
+      const contents = await FileSystem.readAsStringAsync(selected.uri, { encoding: FileSystem.EncodingType.UTF8 });
+      if (!contents.trim()) {
+        Alert.alert('Empty LRC file', 'This file has no lyric text to import.');
+        return;
+      }
+      setLyricsText(contents);
+      setLyricsSource('lrc-import');
+      setCurrentLyricDocumentId(null);
+      setLyricIssues([]);
+      Alert.alert('LRC imported', 'The lyrics are now editable. Review timestamps and text before saving.');
+    } catch {
+      Alert.alert('Could not import LRC', 'The file could not be read. Try another .lrc file or paste its contents manually.');
+    }
+  };
+
   const startOrPause = () => {
     if (!audio) {
       Alert.alert('Choose a recording', 'Select a local audio file before starting your Sadhana.');
@@ -700,7 +728,10 @@ export default function App() {
                 ))}
               </View>
               <Text style={styles.helper}>Automatic generation is available for Gujarati, Hindi, and English. Sanskrit remains manual until a separate accuracy benchmark is completed.</Text>
-              <TextInput value={lyricsText} onChangeText={(value) => { setLyricsText(value); setLyricIssues([]); }} multiline textAlignVertical="top" style={styles.lyricsInput} placeholder="[00:00.00] First line\n[00:05.00] Second line" />
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => void importLrcFile()}>
+                <Text style={styles.secondaryButtonText}>Import .lrc file</Text>
+              </TouchableOpacity>
+              <TextInput value={lyricsText} onChangeText={(value) => { setLyricsText(value); setLyricsSource('manual'); setLyricIssues([]); }} multiline textAlignVertical="top" style={styles.lyricsInput} placeholder="[00:00.00] First line\n[00:05.00] Second line" />
               <View style={styles.controls}>
                 <TouchableOpacity style={[styles.secondaryButton, { flex: 1 }]} onPress={() => void saveLyrics(false)}>
                   <Text style={styles.secondaryButtonText}>Save Draft</Text>
