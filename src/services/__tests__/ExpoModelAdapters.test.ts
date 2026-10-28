@@ -32,6 +32,18 @@ describe('ExpoModelFilePort', () => {
     expect(await files.sha256('/models/tiny.bin')).toBe('a'.repeat(64));
   });
 
+  it('returns exact file size from native file metadata', async () => {
+    (fs.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true, isDirectory: false, size: 1234 });
+    const files = new ExpoModelFilePort();
+    await expect(files.size('/models/tiny.bin')).resolves.toBe(1234);
+  });
+
+  it('rejects file size lookup when metadata is unavailable', async () => {
+    (fs.getInfoAsync as jest.Mock).mockResolvedValue({ exists: false, isDirectory: false });
+    const files = new ExpoModelFilePort();
+    await expect(files.size('/models/missing.bin')).rejects.toThrow('Cannot determine');
+  });
+
   it('rejects invalid digest output', async () => {
     const files = new ExpoModelFilePort(async () => 'not-a-digest');
     await expect(files.sha256('/models/tiny.bin')).rejects.toThrow('invalid SHA-256');
