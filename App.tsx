@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Linking,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -32,6 +33,8 @@ import type { LyricSource } from './src/domain/lyricDocuments';
 import { transcriptionDraftToLrc } from './src/domain/transcriptionLrc';
 import { ExpoModelDownloadPort, ExpoModelFilePort } from './src/services/ExpoModelAdapters';
 import { WhisperModelManager, type ModelInstallProgress } from './src/services/WhisperModelManager';
+import { checkForAppUpdate, type AppUpdateResult } from './src/services/AppUpdateService';
+import appConfig from './app.json';
 
 type AudioSelection = { uri: string; name: string; size?: number | null };
 type SessionRecord = { id: string; prayerName: string; repetitions: number; target: number; completedAt: string };
@@ -96,6 +99,9 @@ export default function App() {
   const [transcriptionNotice, setTranscriptionNotice] = useState<string | null>(null);
   const [lyricsSource, setLyricsSource] = useState<LyricSource>('manual');
   const [tab, setTab] = useState<'home' | 'library' | 'practice' | 'history' | 'settings'>('home');
+  const [updateCheckBusy, setUpdateCheckBusy] = useState(false);
+  const [appUpdate, setAppUpdate] = useState<AppUpdateResult | null>(null);
+  const [updateCheckError, setUpdateCheckError] = useState<string | null>(null);
   const [playerScreen, setPlayerScreen] = useState(false);
   const lyricsScrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);
   const lyricLineOffsets = useRef<Record<number, number>>({});
@@ -294,6 +300,34 @@ export default function App() {
       setTranscriptionBusy(false);
       setTranscriptionRequestId(null);
       setTranscriptionProgress(null);
+    }
+  };
+
+  const checkForUpdates = async () => {
+    setUpdateCheckBusy(true);
+    setUpdateCheckError(null);
+    setAppUpdate(null);
+    try {
+      const result = await checkForAppUpdate(appConfig.expo.version);
+      setAppUpdate(result);
+    } catch (error) {
+      setUpdateCheckError(error instanceof Error ? error.message : 'Could not check for app updates. Try again later.');
+    } finally {
+      setUpdateCheckBusy(false);
+    }
+  };
+
+  const downloadAppUpdate = async () => {
+    if (appUpdate?.status !== 'update-available') return;
+    try {
+      await Linking.openURL(appUpdate.apkDownloadUrl);
+    } catch {
+      setUpdateCheckError('Could not open the APK download. Open the release page and download the APK manually.');
+      try {
+        await Linking.openURL(appUpdate.releaseUrl);
+      } catch {
+        // Keep the actionable error visible if the system cannot open a browser.
+      }
     }
   };
 
@@ -613,6 +647,35 @@ export default function App() {
               <Text style={styles.settingsLabel}>Background audio</Text>
               <Text style={styles.settingsValue}>Configured; device testing required</Text>
             </View>
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsLabel}>App version</Text>
+              <Text style={styles.settingsValue}>{appConfig.expo.version}</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.primaryLightButton, updateCheckBusy && styles.disabledAction]}
+              onPress={() => void checkForUpdates()}
+              disabled={updateCheckBusy}
+            >
+              <Text style={styles.primaryLightButtonText}>{updateCheckBusy ? 'Checking for updates…' : 'Check for updates'}</Text>
+            </TouchableOpacity>
+            {appUpdate?.status === 'no-release' ? (
+              <Text style={styles.helper}>No public app release is available yet. Try again later.</Text>
+            ) : appUpdate?.status === 'up-to-date' ? (
+              <Text style={styles.helper}>You’re up to date. Latest version: {appUpdate.latestVersion}.</Text>
+            ) : appUpdate?.status === 'update-available' ? (
+              <View style={styles.savedLyricCard}>
+                <Text style={styles.settingsLabel}>Update available · v{appUpdate.latestVersion}</Text>
+                <Text style={styles.helper}>Current version: {appUpdate.currentVersion}. Download the APK, open it from your Downloads, and confirm Android’s installation prompt. Android may ask you to allow installs from your browser.</Text>
+                <TouchableOpacity style={styles.primaryLightButton} onPress={() => void downloadAppUpdate()}>
+                  <Text style={styles.primaryLightButtonText}>Download update APK</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.secondaryButton} onPress={() => void Linking.openURL(appUpdate.releaseUrl)}>
+                  <Text style={styles.secondaryButtonText}>View release notes</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            {updateCheckError ? <Text style={styles.lyricIssueError}>{updateCheckError}</Text> : null}
+            <Text style={styles.helper}>Updates are checked against published GitHub releases. An APK must be attached to the release. Android installation always requires your confirmation.</Text>
             <Text style={styles.helper}>Theme, language, and storage-management controls will be added in a later phase.</Text>
           </View>
         ) : tab === 'practice' ? (
