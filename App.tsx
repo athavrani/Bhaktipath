@@ -64,6 +64,9 @@ export default function App() {
     [],
   );
   const whisperArtifact = verifiedWhisperModels[0];
+  const whisperModelPath = whisperArtifact && FileSystem.documentDirectory
+    ? `${FileSystem.documentDirectory}models/${whisperArtifact.id}.bin`
+    : null;
   const transcriptionService = useMemo(() => new WhisperOnDeviceService(
     new WhisperRnRuntime(),
     async () => {
@@ -82,9 +85,6 @@ export default function App() {
       }
     },
   ), [whisperArtifact, whisperModelPath]);
-  const whisperModelPath = whisperArtifact && FileSystem.documentDirectory
-    ? `${FileSystem.documentDirectory}models/${whisperArtifact.id}.bin`
-    : null;
   const [modelInstallProgress, setModelInstallProgress] = useState<ModelInstallProgress | null>(null);
   const [modelInstallBusy, setModelInstallBusy] = useState(false);
   const [modelInstalled, setModelInstalled] = useState(false);
