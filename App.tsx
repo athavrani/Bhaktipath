@@ -731,7 +731,7 @@ export default function App() {
               <TouchableOpacity style={styles.secondaryButton} onPress={() => void importLrcFile()}>
                 <Text style={styles.secondaryButtonText}>Import .lrc file</Text>
               </TouchableOpacity>
-              <TextInput value={lyricsText} onChangeText={(value) => { setLyricsText(value); setLyricsSource('manual'); setLyricIssues([]); }} multiline textAlignVertical="top" style={styles.lyricsInput} placeholder="[00:00.00] First line\n[00:05.00] Second line" />
+              <TextInput value={lyricsText} onChangeText={(value) => { setLyricsText(value); setLyricIssues([]); }} multiline textAlignVertical="top" style={styles.lyricsInput} placeholder="[00:00.00] First line\n[00:05.00] Second line" />
               <View style={styles.controls}>
                 <TouchableOpacity style={[styles.secondaryButton, { flex: 1 }]} onPress={() => void saveLyrics(false)}>
                   <Text style={styles.secondaryButtonText}>Save Draft</Text>
