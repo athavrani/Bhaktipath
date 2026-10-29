@@ -142,7 +142,10 @@ export default function App() {
       const saved = JSON.parse(raw) as PlaylistTrack[];
       if (Array.isArray(saved)) {
         setPlaylist(saved);
-        if (saved.length > 0) setAudio(saved[0]);
+        if (saved.length > 0) {
+          setAudio(saved[0]);
+          player.replace({ uri: saved[0].uri, name: saved[0].name });
+        }
       }
     }).catch(() => undefined);
   }, []);
@@ -429,12 +432,23 @@ export default function App() {
         multiple: true,
       });
       if (result.canceled || !result.assets?.length) return;
-      const added: PlaylistTrack[] = result.assets.map((selected, index) => ({
-        id: `track-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
-        uri: selected.uri,
-        name: selected.name,
-        size: selected.size,
-        mimeType: selected.mimeType,
+      if (!FileSystem.documentDirectory) {
+        throw new Error('App storage is unavailable.');
+      }
+      const playlistDirectory = `${FileSystem.documentDirectory}playlist/`;
+      await FileSystem.makeDirectoryAsync(playlistDirectory, { intermediates: true });
+      const added: PlaylistTrack[] = await Promise.all(result.assets.map(async (selected, index) => {
+        const extension = selected.name.match(/\\.[a-z0-9]{1,8}$/i)?.[0] ?? '';
+        const id = `track-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`;
+        const uri = `${playlistDirectory}${id}${extension}`;
+        await FileSystem.copyAsync({ from: selected.uri, to: uri });
+        return {
+          id,
+          uri,
+          name: selected.name,
+          size: selected.size,
+          mimeType: selected.mimeType,
+        };
       }));
       const existingUris = new Set(playlist.map((track) => track.uri));
       const uniqueAdded = added.filter((track) => !existingUris.has(track.uri));
