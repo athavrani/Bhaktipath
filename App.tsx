@@ -33,10 +33,12 @@ import { transcriptionDraftToLrc } from './src/domain/transcriptionLrc';
 import { ExpoModelDownloadPort, ExpoModelFilePort } from './src/services/ExpoModelAdapters';
 import { WhisperModelManager, type ModelInstallProgress } from './src/services/WhisperModelManager';
 
-type AudioSelection = { uri: string; name: string; size?: number | null };
+type AudioSelection = { uri: string; name: string; size?: number | null; mimeType?: string | null };
+type PlaylistTrack = AudioSelection & { id: string };
 type SessionRecord = { id: string; prayerName: string; repetitions: number; target: number; completedAt: string };
 
 const HISTORY_KEY = '@bhaktipath/session-history-v1';
+const PLAYLIST_KEY = '@bhaktipath/playlist-v1';
 const DEFAULT_LYRICS = '[00:00.00] Paste timestamped lyrics here\n[00:05.00] Example: each line starts with [mm:ss.xx]';
 
 function formatTime(seconds: number): string {
@@ -49,6 +51,8 @@ export default function App() {
   const player = useAudioPlayer(null, { updateInterval: 250 });
   const status = useAudioPlayerStatus(player);
   const [audio, setAudio] = useState<AudioSelection | null>(null);
+  const [playlist, setPlaylist] = useState<PlaylistTrack[]>([]);
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [prayerName, setPrayerName] = useState('My Sadhana');
   const [targetText, setTargetText] = useState('5');
   const [lyricsText, setLyricsText] = useState(DEFAULT_LYRICS);
@@ -133,6 +137,14 @@ export default function App() {
     void AsyncStorage.getItem(HISTORY_KEY).then((raw) => {
       if (raw) setHistory(JSON.parse(raw) as SessionRecord[]);
     }).catch(() => undefined);
+    void AsyncStorage.getItem(PLAYLIST_KEY).then((raw) => {
+      if (!raw) return;
+      const saved = JSON.parse(raw) as PlaylistTrack[];
+      if (Array.isArray(saved)) {
+        setPlaylist(saved);
+        if (saved.length > 0) setAudio(saved[0]);
+      }
+    }).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -173,6 +185,16 @@ export default function App() {
     }
     if (finishHandled.current || !sessionStarted) return;
     finishHandled.current = true;
+    const nextTrackIndex = currentTrackIndex + 1;
+    if (nextTrackIndex < playlist.length) {
+      const nextTrack = playlist[nextTrackIndex];
+      setCurrentTrackIndex(nextTrackIndex);
+      setAudio(nextTrack);
+      player.replace({ uri: nextTrack.uri, name: nextTrack.name });
+      player.play();
+      return;
+    }
+
     const nextCompleted = Math.min(target, completed + 1);
     setCompleted(nextCompleted);
 
@@ -197,9 +219,16 @@ export default function App() {
       return;
     }
 
-    player.seekTo(0);
+    const firstTrack = playlist[0];
+    if (firstTrack) {
+      setCurrentTrackIndex(0);
+      setAudio(firstTrack);
+      player.replace({ uri: firstTrack.uri, name: firstTrack.name });
+    } else {
+      player.seekTo(0);
+    }
     player.play();
-  }, [status.didJustFinish, sessionStarted, completed, target, player, prayerName]);
+  }, [status.didJustFinish, sessionStarted, completed, target, player, prayerName, currentTrackIndex, playlist]);
 
   const installWhisperModel = async () => {
     if (!whisperArtifact || !whisperModelPath || modelInstallBusy) return;
@@ -383,25 +412,98 @@ export default function App() {
     ]);
   };
 
+  const persistPlaylist = async (next: PlaylistTrack[]) => {
+    setPlaylist(next);
+    try {
+      await AsyncStorage.setItem(PLAYLIST_KEY, JSON.stringify(next));
+    } catch {
+      Alert.alert('Playlist not saved', 'The playlist is available for this session, but could not be saved locally.');
+    }
+  };
+
   const chooseAudio = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'audio/*',
+        type: ['audio/*', 'video/*'],
         copyToCacheDirectory: true,
-        multiple: false,
+        multiple: true,
       });
-      if (result.canceled || !result.assets?.[0]) return;
-      const selected = result.assets[0];
-      const nextAudio = { uri: selected.uri, name: selected.name, size: selected.size };
-      player.pause();
-      player.replace({ uri: nextAudio.uri, name: nextAudio.name });
-      setAudio(nextAudio);
+      if (result.canceled || !result.assets?.length) return;
+      const added: PlaylistTrack[] = result.assets.map((selected, index) => ({
+        id: `track-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+        uri: selected.uri,
+        name: selected.name,
+        size: selected.size,
+        mimeType: selected.mimeType,
+      }));
+      const existingUris = new Set(playlist.map((track) => track.uri));
+      const uniqueAdded = added.filter((track) => !existingUris.has(track.uri));
+      if (uniqueAdded.length === 0) {
+        Alert.alert('Already in playlist', 'The selected files are already in your playlist.');
+        return;
+      }
+      const next = [...playlist, ...uniqueAdded];
+      await persistPlaylist(next);
+      if (!audio) {
+        setCurrentTrackIndex(0);
+        setAudio(next[0]);
+        player.replace({ uri: next[0].uri, name: next[0].name });
+      }
       setCompleted(0);
       setSessionStarted(false);
       finishHandled.current = false;
+      Alert.alert('Playlist updated', `Added ${uniqueAdded.length} track(s). Playback follows the playlist order.`);
     } catch {
-      Alert.alert('Could not open audio', 'Please choose a supported audio file from your phone.');
+      Alert.alert('Could not add media', 'Please choose supported audio or video files from your phone.');
     }
+  };
+
+  const selectPlaylistTrack = (index: number) => {
+    const selected = playlist[index];
+    if (!selected) return;
+    player.pause();
+    setCurrentTrackIndex(index);
+    setAudio(selected);
+    player.replace({ uri: selected.uri, name: selected.name });
+    setCompleted(0);
+    setSessionStarted(false);
+    finishHandled.current = false;
+  };
+
+  const removePlaylistTrack = (index: number) => {
+    const removed = playlist[index];
+    const next = playlist.filter((_, itemIndex) => itemIndex !== index);
+    void persistPlaylist(next);
+    if (next.length === 0) {
+      player.pause();
+      setAudio(null);
+      setCurrentTrackIndex(0);
+      setSessionStarted(false);
+      setCompleted(0);
+      return;
+    }
+    let nextIndex = currentTrackIndex;
+    if (index < currentTrackIndex) nextIndex -= 1;
+    else if (index === currentTrackIndex) nextIndex = Math.min(index, next.length - 1);
+    setCurrentTrackIndex(nextIndex);
+    if (removed?.id === playlist[currentTrackIndex]?.id) {
+      player.pause();
+      setAudio(next[nextIndex]);
+      player.replace({ uri: next[nextIndex].uri, name: next[nextIndex].name });
+      setSessionStarted(false);
+      setCompleted(0);
+    }
+  };
+
+  const movePlaylistTrack = (index: number, delta: -1 | 1) => {
+    const destination = index + delta;
+    if (destination < 0 || destination >= playlist.length) return;
+    const next = [...playlist];
+    [next[index], next[destination]] = [next[destination], next[index]];
+    const activeId = playlist[currentTrackIndex]?.id;
+    const nextIndex = next.findIndex((track) => track.id === activeId);
+    void persistPlaylist(next);
+    if (nextIndex >= 0) setCurrentTrackIndex(nextIndex);
   };
 
   const importLrcFile = async () => {
@@ -628,8 +730,27 @@ export default function App() {
               <Text style={styles.label}>Prayer / session name</Text>
               <TextInput value={prayerName} onChangeText={setPrayerName} style={styles.input} placeholder="e.g. Hanuman Chalisa" />
               <TouchableOpacity style={styles.secondaryButton} onPress={() => void chooseAudio()}>
-                <Text style={styles.secondaryButtonText}>{audio ? 'Change audio recording' : '＋ Select audio from phone'}</Text>
+                <Text style={styles.secondaryButtonText}>＋ Add audio / video files to playlist</Text>
               </TouchableOpacity>
+              <Text style={styles.helper}>Select multiple files at once. Video files play their audio track; video is not shown on screen. Your playlist order is saved on this device.</Text>
+              {playlist.length > 0 ? (
+                <View style={styles.playlistCard}>
+                  <Text style={styles.sectionTitle}>Playlist · {playlist.length} track(s)</Text>
+                  {playlist.map((track, index) => (
+                    <View key={track.id} style={[styles.playlistItem, index === currentTrackIndex && styles.playlistItemActive]}>
+                      <TouchableOpacity style={{ flex: 1 }} onPress={() => selectPlaylistTrack(index)}>
+                        <Text style={styles.audioName} numberOfLines={2}>{index + 1}. {track.name}</Text>
+                        <Text style={styles.muted}>{index === currentTrackIndex ? 'Selected track' : track.mimeType?.startsWith('video/') ? 'Video · audio playback' : 'Audio track'}</Text>
+                      </TouchableOpacity>
+                      <View style={styles.playlistActions}>
+                        <TouchableOpacity disabled={index === 0} onPress={() => movePlaylistTrack(index, -1)}><Text style={[styles.playlistAction, index === 0 && styles.playlistActionDisabled]}>↑</Text></TouchableOpacity>
+                        <TouchableOpacity disabled={index === playlist.length - 1} onPress={() => movePlaylistTrack(index, 1)}><Text style={[styles.playlistAction, index === playlist.length - 1 && styles.playlistActionDisabled]}>↓</Text></TouchableOpacity>
+                        <TouchableOpacity onPress={() => removePlaylistTrack(index)}><Text style={styles.playlistRemove}>×</Text></TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : <Text style={styles.helper}>Your playlist is empty. Add one or more local audio or video files to begin.</Text>}
               {audio ? (
                 <View style={styles.audioInfo}>
                   <Text style={styles.audioIcon}>♫</Text>
@@ -882,6 +1003,13 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: '#8D411F', fontWeight: '800' },
   disabledAction: { opacity: 0.5 },
   audioInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 11, backgroundColor: '#F8F1E8', borderRadius: 12 },
+  playlistCard: { borderWidth: 1, borderColor: '#F0E3D6', borderRadius: 12, padding: 10, gap: 7 },
+  playlistItem: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 9, borderRadius: 9, backgroundColor: '#FFFCF7' },
+  playlistItemActive: { backgroundColor: '#FFF0E0', borderWidth: 1, borderColor: '#E4A36B' },
+  playlistActions: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  playlistAction: { color: '#8D411F', fontSize: 19, fontWeight: '800', paddingHorizontal: 2 },
+  playlistActionDisabled: { color: '#D8C8BA' },
+  playlistRemove: { color: '#A33E2D', fontSize: 23, fontWeight: '700', paddingHorizontal: 2 },
   audioIcon: { fontSize: 24, color: '#A94F21' },
   audioName: { color: '#4D3024', fontWeight: '700', fontSize: 12 },
   muted: { color: '#9A8375', fontSize: 11, marginTop: 3 },
